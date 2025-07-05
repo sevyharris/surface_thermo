@@ -7,7 +7,6 @@ import ase.eos
 import logging
 
 import fairchem.core.models.model_registry
-import fairchem.core.models.equiformer_v2.trainers.forces_trainer
 import fairchem.core.common.relaxation.ase_utils
 
 import matplotlib.pyplot as plt
@@ -16,7 +15,6 @@ import matplotlib.pyplot as plt
 metal = 'Pt'  # Change this to the desired metal
 crystal_structure = 'fcc'  # Change this to the desired crystal structure (e.g., 'fcc', 'bcc', 'hcp')
 plotting = True  # Set to True if you want to plot the results, False otherwise
-final_lattice_constant = None  # This will hold the final lattice constant after analysis
 results_dir = '../results'  # Directory to save results
 # set up logging
 logging.basicConfig(level=logging.INFO)
@@ -122,7 +120,7 @@ logging.info(f'Final lattice constant for {metal} in {crystal_structure} structu
 results = {
     'metal': metal,
     'crystal_structure': crystal_structure,
-    'final_lattice_constant': final_lattice_constant,
+    'final_lattice_constant': float(final_a0),
 }
 output_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}_lattice_constant.yaml')
 if not os.path.exists(os.path.dirname(output_file)):
