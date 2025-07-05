@@ -1,13 +1,9 @@
 import os
 import numpy as np
-import copy
+import yaml
 
 import ase.build
-import ase.optimize
-import ase.visualize
 import ase.eos
-import ase.constraints
-import ase.vibrations
 import logging
 
 import fairchem.core.models.model_registry
@@ -21,12 +17,13 @@ metal = 'Pt'  # Change this to the desired metal
 crystal_structure = 'fcc'  # Change this to the desired crystal structure (e.g., 'fcc', 'bcc', 'hcp')
 plotting = True  # Set to True if you want to plot the results, False otherwise
 final_lattice_constant = None  # This will hold the final lattice constant after analysis
+results_dir = '../results'  # Directory to save results
 # set up logging
 logging.basicConfig(level=logging.INFO)
 
 
 # Define the OCP calculator
-checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file('EquiformerV2-31M-S2EF-OC20-All+MD', local_cache='./tmp/fairchem_checkpoints/')
+checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file('EquiformerV2-31M-S2EF-OC20-All+MD', local_cache='/home/moon/surface/tmp/fairchem_checkpoints/')
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(checkpoint_path=checkpoint_path, cpu=True, seed=400)
 
 
@@ -303,3 +300,20 @@ if plotting:
 if final_lattice_constant is None:
     final_lattice_constant = ultra_fine_a0
 logging.info(f'Final lattice constant for {metal} in {crystal_structure} structure: {final_lattice_constant:.12f} Å')
+
+
+# Save final results to a yaml file
+results = {
+    'metal': metal,
+    'crystal_structure': crystal_structure,
+    'final_lattice_constant': final_lattice_constant,
+}
+
+
+
+output_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}_lattice_constant.yaml')
+if not os.path.exists(os.path.dirname(output_file)):
+    os.makedirs(os.path.dirname(output_file))
+with open(output_file, 'w') as f:
+    yaml.dump(results, f, default_flow_style=False)
+logging.info(f"Results saved to {output_file}")
