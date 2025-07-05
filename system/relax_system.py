@@ -27,8 +27,8 @@ calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(
     seed=400
 )
 
-adsorbate_label = 'H'  # Change this to the desired adsorbate (e.g., 'H2', 'O2', 'CO', etc.)
-site = 'ontop'  # Change this to the desired adsorption site (e.g., 'hcp', 'ontop', 'fcc', 'bridge', etc.)
+adsorbate_label = 'H2'  # Change this to the desired adsorbate (e.g., 'H2', 'O2', 'CO', etc.)
+site = 'hcp'  # Change this to the desired adsorption site ('hcp', 'ontop', 'fcc', 'bridge')
 metal = 'Pt'  # Change this to the desired metal
 crystal_structure = 'fcc'  # Change this to the desired crystal structure (e.g., 'fcc', 'bcc', 'hcp')
 facet = '111'  # Change this to the desired facet (e.g., '111', '100', '110')
@@ -65,7 +65,9 @@ MAXSTEP = 500  # Maximum number of optimization steps -- change this later to be
 opt_complete = False  # Flag to check if the optimization is complete
 
 # Try loading the system from the trajectory file if it exists
-trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
+trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
+if not os.path.exists(os.path.dirname(trajectory_file)):
+    os.makedirs(os.path.dirname(trajectory_file))
 if os.path.exists(trajectory_file):
     logging.info(f"Loading system from existing trajectory file: {trajectory_file}")
     traj = ase.io.trajectory.Trajectory(trajectory_file)
@@ -95,8 +97,8 @@ else:
 
     system.calc = calc
     logfile = 'ase.log'
-    trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
-    logfile = os.path.join(results_dir, 'system', f'ase_{metal}{facet}_{adsorbate_label}_{site}.log')
+    trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
+    logfile = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'ase_{metal}{facet}_{adsorbate_label}_{site}.log')
 
 
 if not opt_complete:
@@ -115,7 +117,7 @@ if plotting:
     plt.ylabel('Energy (eV)')
     plt.title(f'Optimization Energy for {metal}{facet}_{adsorbate_label}_{site}')
     plt.legend()
-    plt.savefig(os.path.join(results_dir, 'system', f'opt_energy_{metal}{facet}_{adsorbate_label}_{site}.png'))
+    plt.savefig(os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'opt_energy_{metal}{facet}_{adsorbate_label}_{site}.png'))
     plt.close()
 
 
@@ -144,15 +146,13 @@ result = {
     'frequencies': freq.tolist(),
     'zpe': float(vib.get_zero_point_energy()),
 }
-result_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
-if not os.path.exists(os.path.dirname(result_file)):
-    os.makedirs(os.path.dirname(result_file))
+result_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
 with open(result_file, 'w') as f:
     yaml.dump(result, f, default_flow_style=False)
 
 
 # Save a picture of the relaxed system
-side_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}_{site}_side.png')
-top_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}_{site}_top.png')
-ase.io.write(side_pic, system, rotation='90x,0y,0z')
+side_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_side.png')
+top_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_top.png')
+ase.io.write(side_pic, system, rotation='-90x,0y,0z')
 ase.io.write(top_pic, system, rotation='0x,0y,0z')
