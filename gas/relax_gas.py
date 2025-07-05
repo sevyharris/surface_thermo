@@ -43,7 +43,7 @@ adsorbate.calc = calc
 
 # Optimize the adsorbate by itself
 logging.info(f'Running optimization for {adsorbate_label}')
-trajectory_file = os.path.join(results_dir, 'gas', f'{adsorbate_label}_opt.traj')
+trajectory_file = os.path.join(results_dir, 'gas', f'{adsorbate_label}.traj')
 if not os.path.exists(os.path.dirname(trajectory_file)):
     os.makedirs(os.path.dirname(trajectory_file))
 opt = ase.optimize.BFGS(adsorbate, trajectory=trajectory_file)

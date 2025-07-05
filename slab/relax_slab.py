@@ -32,23 +32,11 @@ plotting = True  # Set to True if you want to plot the results, False otherwise
 
 
 # start by loading the lattice constant result from the bulk yaml file
-def load_lattice_constant(metal, crystal_structure):
-    """
-    Load the lattice constant from the bulk yaml file.
-    """
-    bulk_yaml_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}_lattice_constant.yaml')
-    if not os.path.exists(bulk_yaml_file):
-        raise FileNotFoundError(f"Bulk lattice constant file '{bulk_yaml_file}' does not exist.")
-    with open(bulk_yaml_file, 'r') as f:
-        data = yaml.load(f, Loader=yaml.Loader)
-    
-    return data.get('final_lattice_constant', None)
-
-
-lattice_constant = load_lattice_constant(metal, crystal_structure)
+bulk_yaml_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}_lattice_constant.yaml')
+with open(bulk_yaml_file, 'r') as f:
+    data = yaml.load(f, Loader=yaml.Loader)
+    lattice_constant = data.get('final_lattice_constant', None)
 logging.info(f"Loaded lattice constant for {metal} {crystal_structure}: {lattice_constant} Å")
-
-
 
 fmax = 0.01
 vacuum = 7.5
