@@ -1,7 +1,10 @@
 import os
+import ase.collections
 import numpy as np
 import copy
 import yaml
+
+import argparse
 
 import ase.build
 import ase.optimize
@@ -27,12 +30,27 @@ calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(
     seed=400
 )
 
-adsorbate_label = 'H2'  # Change this to the desired adsorbate (e.g., 'H2', 'O2', 'CO', etc.)
-site = 'hcp'  # Change this to the desired adsorption site ('hcp', 'ontop', 'fcc', 'bridge')
-metal = 'Pt'  # Change this to the desired metal
-crystal_structure = 'fcc'  # Change this to the desired crystal structure (e.g., 'fcc', 'bcc', 'hcp')
-facet = '111'  # Change this to the desired facet (e.g., '111', '100', '110')
-plotting = True  # Set to True if you want to plot the results, False otherwise
+
+# parse arguments:
+parser = argparse.ArgumentParser(description='Relax a system with an adsorbate on a metal slab.')
+parser.add_argument('--metal', type=str, default='Pt', help='Metal to use for the slab (default: Pt)')
+parser.add_argument('--facet', type=str, default='111', help='Facet of the metal slab (default: 111)')
+parser.add_argument('--adsorbate', type=str, default='H2', help='Adsorbate to use (default: H2)')
+parser.add_argument('--site', type=str, default='hcp', help='Adsorption site (default: hcp)')
+parser.add_argument('--plotting', action='store_true', help='Enable plotting of optimization energies')
+args = parser.parse_args()
+
+
+adsorbate_label = args.adsorbate
+site = args.site
+metal = args.metal
+facet = args.facet
+plotting = args.plotting
+
+
+# assert adsorbate_label in ase.collections.g2.keys()
+# assert site in ['fcc', 'hcp', 'bridge', 'ontop'], f"Invalid site: {site}. Choose from 'fcc', 'hcp', 'bridge', or 'ontop'"
+
 
 results_dir = '../results'  # Directory to save results
 # set up logging

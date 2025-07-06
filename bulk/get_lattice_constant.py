@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import yaml
+import argparse
 
 import ase.build
 import ase.eos
@@ -12,9 +13,18 @@ import fairchem.core.common.relaxation.ase_utils
 import matplotlib.pyplot as plt
 
 
-metal = 'Pt'  # Change this to the desired metal
-crystal_structure = 'fcc'  # Change this to the desired crystal structure (e.g., 'fcc', 'bcc', 'hcp')
-plotting = True  # Set to True if you want to plot the results, False otherwise
+# read in the metal from command line
+parser = argparse.ArgumentParser(description='Calculate the lattice constant of a metal.')
+parser.add_argument('--metal', type=str, default='Pt', help='Metal to use for the calculation (default: Pt)')
+parser.add_argument('--crystal_structure', type=str, default='fcc', help='Crystal structure (default: fcc)')
+parser.add_argument('--initial_guess', type=float, default=3.5, help='Initial guess for the lattice constant (default: 3.5 Å)')
+
+args = parser.parse_args()
+
+metal = args.metal
+crystal_structure = args.crystal_structure
+initial_guess = args.initial_guess
+plotting = True
 results_dir = '../results'  # Directory to save results
 # set up logging
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +77,14 @@ def run_eos_analysis(description, a0_init, half_range):
     volumes = np.zeros_like(lattice_constants)
     for i in range(len(energies)):
         bulk = ase.build.bulk(metal, crystalstructure=crystal_structure, a=lattice_constants[i], cubic=True)
+        
+        if metal == 'Cr':
+            # Chromium has a magnetic ground state, so we need to set the spin polarization
+            bulk.set_initial_magnetic_moments([2.0, -2.0])
+        elif metal == 'Fe':
+            # Iron also has a magnetic ground state, so we need to set the spin polarization
+            bulk.set_initial_magnetic_moments([2.0, 2.0])
+
         bulk.calc = calc
         energies[i] = bulk.get_potential_energy()
         volumes[i] = bulk.cell.volume
@@ -97,17 +115,17 @@ def run_eos_analysis(description, a0_init, half_range):
 
 
 levels_of_analysis = {
-    'very_coarse': 1.500,
+    # 'very_coarse': 1.500,
     'coarse': 0.500,
     'medium': 0.250,
     'fine': 0.050,
-    'very_fine': 0.025,
+    'very_fine': 0.015,
     'ultra_fine': 0.005
 }
 
 level_results = {}
 
-final_a0 = 3.5  # Initial guess for the very coarse level
+final_a0 = initial_guess  # Initial guess for the very coarse level
 for level, half_range in levels_of_analysis.items():
     logging.info(f"Running {level} energy of state analysis...")
     final_a0 = run_eos_analysis(level, final_a0, half_range)

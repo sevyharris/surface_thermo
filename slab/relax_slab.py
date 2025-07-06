@@ -2,6 +2,7 @@ import os
 import numpy as np
 import copy
 import yaml
+import argparse
 
 import ase.build
 import ase.optimize
@@ -19,11 +20,20 @@ import fairchem.core.common.relaxation.ase_utils
 import matplotlib.pyplot as plt
 
 
-metal = 'Pt'  # Change this to the desired metal
-crystal_structure = 'fcc'  # Change this to the desired crystal structure (e.g., 'fcc', 'bcc', 'hcp')
-facet = '111'  # Change this to the desired facet (e.g., '111', '100', '110')
-plotting = True  # Set to True if you want to plot the results, False otherwise
-final_lattice_constant = None  # This will hold the final lattice constant after analysis
+# read in the metal, crystal structure, facet, and plotting options from command line
+parser = argparse.ArgumentParser(description='Relax a metal slab with a specific facet.')
+parser.add_argument('--metal', type=str, default='Pt', help='Metal to use for the slab (default: Pt)')
+parser.add_argument('--crystal_structure', type=str, default='fcc', help='Crystal structure (default: fcc)')
+parser.add_argument('--facet', type=str, default='111', help='Facet of the metal slab (default: 111)')
+
+
+args = parser.parse_args()
+
+metal = args.metal
+crystal_structure = args.crystal_structure
+facet = args.facet
+plotting = True
+lattice_constant = None  # This will hold the final lattice constant after analysis
 results_dir = '../results'  # Directory to save results
 # set up logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +50,25 @@ logging.info(f"Loaded lattice constant for {metal} {crystal_structure}: {lattice
 
 fmax = 0.01
 vacuum = 7.5
-slab = ase.build.fcc111('Pt', size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+if crystal_structure == 'fcc':
+    if facet == '111':
+        slab = ase.build.fcc111(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+    elif facet == '100':
+        slab = ase.build.fcc100(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+    elif facet == '110':
+        slab = ase.build.fcc110(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+    else:
+        raise ValueError(f"Invalid facet: {facet}. Choose from '111', '100', or '110'.")
+elif crystal_structure == 'bcc':
+    if facet == '110':
+        slab = ase.build.bcc110(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+    elif facet == '100':
+        slab = ase.build.bcc100(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+    elif facet == '211':
+        slab = ase.build.bcc211(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+    else:
+        raise ValueError(f"Invalid facet: {facet}. Choose from '110', '100', or '211'.")
+
 
 # Fix the bottom two layers
 bottom_layer = []
@@ -58,6 +86,32 @@ fixed_indices = bottom_layer + second_layer
 fix_bottom_layers = ase.constraints.FixAtoms(indices=fixed_indices)
 slab.set_constraint(fix_bottom_layers)
 
+if metal == 'Cr':
+    # For Cr, we need to set the magnetic moments as antiferromagnetic
+    z_levels = sorted(list(set(slab.positions[:, 2])))
+    layer_index_sets = []
+    for j, z_level in enumerate(z_levels):
+        level_set = []
+        for i in range(len(slab)):
+            if slab.positions[i, 2] == z_level:
+                level_set.append(i)
+        layer_index_sets.append(level_set)
+
+    magmoms = np.zeros_like(slab.get_initial_magnetic_moments())
+
+    STARTING_MAG = 2.0
+    for i, layer in enumerate(layer_index_sets):
+        for atom_index in layer:
+            if i % 2 == 0:
+                magmoms[atom_index] = STARTING_MAG
+            else:
+                magmoms[atom_index] = -STARTING_MAG
+    slab.set_initial_magnetic_moments(magmoms)
+
+elif metal == 'Fe':
+    # For Fe, we need to set the magnetic moment
+    slab.set_initial_magnetic_moments([2.0] * len(slab))
+
 
 checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file('EquiformerV2-31M-S2EF-OC20-All+MD', local_cache='/home/moon/surface/tmp/fairchem_checkpoints/')
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(checkpoint_path=checkpoint_path, cpu=True, seed=400)
@@ -74,7 +128,11 @@ if os.path.exists(trajectory_file):
     traj = ase.io.trajectory.Trajectory(trajectory_file)
     slab = traj[-1]  # Get the last frame from the trajectory
     # only run the optimization if the slab is not already relaxed
-    final_force = slab.calc.results['forces'] if 'forces' in slab.calc.results else np.inf
+    try:
+        final_force = slab.calc.results['forces']
+    except KeyError:
+        final_force = np.zeros_like(slab.get_positions()) + np.inf
+
     # only count the forces on the atoms that are not fixed
     final_force = [final_force[i, :] if i not in fixed_indices else np.zeros(3) for i in range(final_force.shape[0])]
 
@@ -88,8 +146,9 @@ else:
 
 # If the slab is not relaxed, run the optimization
 if not opt_complete:
+    slab.calc = calc
     opt = ase.optimize.BFGS(slab, trajectory=trajectory_file)
-    opt.run(fmax=fmax, steps=1000)
+    opt.run(fmax=fmax, steps=10000)
 
 if plotting:
     # get energies from the trajectory
@@ -108,3 +167,7 @@ if plotting:
     plt.grid()
     plt.savefig(os.path.join(results_dir, 'slab', f'{metal}{facet}_slab_relaxation_energies.png'))
 
+
+# save a picture of the relaxed slab
+ase.io.write(os.path.join(results_dir, 'slab', f'{metal}{facet}_slab_top.png'), slab, rotation="0x,0y,0z")
+ase.io.write(os.path.join(results_dir, 'slab', f'{metal}{facet}_slab_side.png'), slab, rotation="-90x,0y,0z")
