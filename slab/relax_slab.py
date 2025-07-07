@@ -147,7 +147,7 @@ else:
 # If the slab is not relaxed, run the optimization
 if not opt_complete:
     slab.calc = calc
-    opt = ase.optimize.BFGS(slab, trajectory=trajectory_file)
+    opt = ase.optimize.BFGS(slab, trajectory=trajectory_file, append_trajectory=True)
     opt.run(fmax=fmax, steps=10000)
 
 if plotting:

@@ -1,4 +1,6 @@
 import os
+import sys
+
 import ase.collections
 import numpy as np
 import copy
@@ -18,6 +20,8 @@ import fairchem.core.common.relaxation.ase_utils
 
 import matplotlib.pyplot as plt
 
+sys.path.append('/home/moon/surface/surface_thermo')
+import util
 
 # Initialize fairchem ocp calculator
 checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
@@ -83,25 +87,17 @@ MAXSTEP = 500  # Maximum number of optimization steps -- change this later to be
 opt_complete = False  # Flag to check if the optimization is complete
 
 # Try loading the system from the trajectory file if it exists
-trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
-if not os.path.exists(os.path.dirname(trajectory_file)):
-    os.makedirs(os.path.dirname(trajectory_file))
-if os.path.exists(trajectory_file):
-    logging.info(f"Loading system from existing trajectory file: {trajectory_file}")
-    traj = ase.io.trajectory.Trajectory(trajectory_file)
+system_trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
+if not os.path.exists(os.path.dirname(system_trajectory_file)):
+    os.makedirs(os.path.dirname(system_trajectory_file))
+if os.path.exists(system_trajectory_file):
+    logging.info(f"Loading system from existing trajectory file: {system_trajectory_file}")
+    traj = ase.io.trajectory.Trajectory(system_trajectory_file, mode='r')
     system = traj[-1]  # Get the last frame from the trajectory
-
-    # check if the slab is already relaxed
-    fixed_indices = system.constraints[0].get_indices()
-    final_force = slab.calc.results['forces'] if 'forces' in slab.calc.results else np.inf
-    # only count the forces on the atoms that are not fixed
-    final_force = [final_force[i, :] if i not in fixed_indices else np.zeros(3) for i in range(final_force.shape[0])]
-
-    logging.info(f"Final forces on slab: {np.max(np.linalg.norm(final_force, axis=1))}")
-    if np.max(np.linalg.norm(final_force, axis=1)) < fmax:
+    # Check if the system is converged
+    if util.atoms_converged(system, fmax=fmax):
         logging.info(f"System for {metal} {facet} + {adsorbate_label} {site} is already relaxed with forces below {fmax} eV/Å")
         opt_complete = True
-
 else:
     logging.info(f"No existing trajectory file found for {metal}{facet}_{adsorbate_label}_{site}. Starting from slab.")
     system = copy.deepcopy(slab)
@@ -109,25 +105,21 @@ else:
     # Load the adsorbate geometry from trajectory file
     adsorbate_trajectory_file = os.path.join(results_dir, 'gas', f'{adsorbate_label}.traj')
     logging.info(f"Loading adsorbate from existing trajectory file: {adsorbate_trajectory_file}")
-    adsorbate_traj = ase.io.trajectory.Trajectory(adsorbate_trajectory_file)
+    adsorbate_traj = ase.io.trajectory.Trajectory(adsorbate_trajectory_file, mode='r')
     adsorbate = adsorbate_traj[-1]  # Get the last frame from the trajectory
     ase.build.add_adsorbate(system, adsorbate, 2.0, site)
 
-    system.calc = calc
-    logfile = 'ase.log'
-    trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
-    logfile = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'ase_{metal}{facet}_{adsorbate_label}_{site}.log')
-
-
+system.calc = calc
+logfile = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'ase_{metal}{facet}_{adsorbate_label}_{site}.log')
 if not opt_complete:
     logging.info(f'Running optimization for {metal}{facet}_{adsorbate_label}_{site}')
-    opt = ase.optimize.BFGS(system, logfile=logfile, trajectory=trajectory_file)
+    opt = ase.optimize.BFGS(system, logfile=logfile, trajectory=system_trajectory_file, append_trajectory=True)
     opt.run(fmax=fmax, steps=MAXSTEP)
 
 
 # make plot of optimization energies
 if plotting:
-    result_traj = ase.io.trajectory.Trajectory(trajectory_file)
+    result_traj = ase.io.trajectory.Trajectory(system_trajectory_file, mode='r')
     energies = [frame.calc.results['energy'] for frame in result_traj]
     plt.figure()
     plt.plot(energies, label='Total Energy')
@@ -135,7 +127,8 @@ if plotting:
     plt.ylabel('Energy (eV)')
     plt.title(f'Optimization Energy for {metal}{facet}_{adsorbate_label}_{site}')
     plt.legend()
-    plt.savefig(os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'opt_energy_{metal}{facet}_{adsorbate_label}_{site}.png'))
+    system_opt_plot_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'opt_energy_{metal}{facet}_{adsorbate_label}_{site}.png')
+    plt.savefig(system_opt_plot_file)
     plt.close()
 
 
