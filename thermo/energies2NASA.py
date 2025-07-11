@@ -460,7 +460,7 @@ def parse_input_file(input_file, molecule, element1):
 
     # if provided in eV, convert to kJ/mol
     if molecule.heat_of_formation_0K_units == 'eV':
-        molecule.heat_of_formation_0K = molecule.heat_of_formation_0K * molecule.eV_to_kJpermole
+        molecule.heat_of_formation_0K = molecule.heat_of_formation_0K * eV_to_kJpermole
         molecule.heat_of_formation_0K_units = 'kJ/mol'
 
     molecule.adsorbate_mass = input_data['adsorbate_mass'][0]
@@ -494,9 +494,31 @@ element = 'O'
 
 new_output = open('my_new_cti.txt', 'w')
 
+
 filenames = [
-    '/home/moon/surface/surface_thermo/thermo/H2O_katrin.yaml'
+    # '/home/moon/surface/surface_thermo/thermo/H_sevy.yaml'
+    '/home/moon/surface/surface_thermo/results/thermo/H-ads.yaml',
+    '/home/moon/surface/surface_thermo/results/thermo/O-ads.yaml',
+    '/home/moon/surface/surface_thermo/results/thermo/N-ads.yaml',
+    '/home/moon/surface/surface_thermo/results/thermo/C-ads.yaml',
 ]
+binding_elements = ['H', 'O', 'N', 'C']   # TODO feed this through the input file
+
+
+# filenames = [
+#     # '/home/moon/surface/surface_thermo/thermo/H2O_katrin.yaml'
+#     '/home/moon/surface/surface_thermo/results/thermo/H-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/C-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/O-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/H2O-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/N-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/NH3-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/N2-ads.yaml',
+    
+#     # '/home/moon/surface/surface_thermo/results/thermo/H2-ads.yaml'
+# ]
+
+# binding_elements = ['H', 'C', 'O', 'O', 'N', 'N', 'N']   # TODO feed this through the input file
 
 
 name_line = '\n'
@@ -506,7 +528,9 @@ counter = -1
 
 
 # compile it all into a single database and a single library which I'll call harris_butane
-my_library_name = 'Pt_thermodata_adsorbates'
+# my_library_name = 'Pt_thermodata_adsorbates'
+my_library_name = 'Pt_thermodata_adsorbates_DFT'
+
 output_file = f'{my_library_name}.py'
 thermo_database = rmgpy.data.thermo.ThermoDatabase()
 thermo_database.libraries[my_library_name] = rmgpy.data.thermo.ThermoLibrary()
@@ -521,6 +545,7 @@ for index, filename in enumerate(filenames):
     # filename = species.strip()
 
     test = Molecule()
+    element = binding_elements[index]
     parse_input_file(filename, test, element)
     thermo(test, temperature)
     
