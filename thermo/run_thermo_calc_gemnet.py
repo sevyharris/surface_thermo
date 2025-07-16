@@ -20,7 +20,8 @@ import rmgpy.chemkin
 logging.basicConfig(level=logging.INFO)
 
 # script to convert binding energies to NASA polynomials
-metal = 'Pt'
+# metal = 'Pt'
+# metal = 'Fe'
 facet = '111'
 
 if facet == '111':
@@ -35,10 +36,10 @@ elif facet == '110':
 # get adsorbate label from input
 parser = argparse.ArgumentParser(description='Run thermo calculation for adsorbate on metal facet.')
 parser.add_argument('--adsorbate', type=str, default='H', help='Adsorbate label (default: H)')
+parser.add_argument('--metal', type=str, default='Pt', help='Metal label (default: Pt)')
 args = parser.parse_args()
 adsorbate_label = args.adsorbate
-
-
+metal = args.metal
 
 species_dictionary = rmgpy.chemkin.load_species_dictionary(
     '../my_dictionary.txt'
@@ -48,6 +49,7 @@ translator = {
     'H': 'HX',
     'H2': 'H2X',
     'O': 'OX',
+    'OH': 'HOX',
     'H2O': 'H2OX',
     'CH3': 'CH3X',
     # 'CH4': 'CH4X',
@@ -66,6 +68,10 @@ translator = {
 
 # adsorbate_label = 'H2'
 results_dir = f'../results'
+my_result_yaml = os.path.join(results_dir, 'thermo', f'{metal}{facet}', f'{metal}{facet}_{adsorbate_label}-ads.yaml')
+if not os.path.exists(os.path.dirname(my_result_yaml)):
+    os.makedirs(os.path.dirname(my_result_yaml), exist_ok=True)
+
 
 eV_to_kJ = 96.485332
 
@@ -290,7 +296,7 @@ print(thermo_data)
 #     f.write(f'frequencies = {frequencies_str}\n')
 
 # also save as yaml file
-my_result_yaml = os.path.join(results_dir, 'thermo', f'{adsorbate_label}-ads.yaml')
+my_result_yaml = os.path.join(results_dir, 'thermo', f'{metal}{facet}', f'{metal}{facet}_{adsorbate_label}-ads.yaml')
 results_dict = {
     'name': f'{adsorbate_label}_ads',
     'DFT_binding_energy': [0, 'eV'],

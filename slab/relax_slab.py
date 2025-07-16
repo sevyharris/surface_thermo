@@ -6,15 +6,13 @@ import argparse
 
 import ase.build
 import ase.optimize
+# import sella
+
 import ase.io.trajectory
-import ase.visualize
-import ase.eos
 import ase.constraints
-import ase.vibrations
 import logging
 
 import fairchem.core.models.model_registry
-import fairchem.core.models.equiformer_v2.trainers.forces_trainer
 import fairchem.core.common.relaxation.ase_utils
 
 import matplotlib.pyplot as plt
@@ -42,7 +40,7 @@ plotting = True  # Set to True if you want to plot the results, False otherwise
 
 
 # start by loading the lattice constant result from the bulk yaml file
-bulk_yaml_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}_lattice_constant.yaml')
+bulk_yaml_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}', f'{metal}_{crystal_structure}_lattice_constant.yaml')
 with open(bulk_yaml_file, 'r') as f:
     data = yaml.load(f, Loader=yaml.Loader)
     lattice_constant = data.get('final_lattice_constant', None)
@@ -57,6 +55,8 @@ if crystal_structure == 'fcc':
         slab = ase.build.fcc100(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
     elif facet == '110':
         slab = ase.build.fcc110(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+        if metal == 'Fe':
+            slab = ase.build.fcc110(metal, size=(4, 4, 4), vacuum=vacuum, a=lattice_constant)
     else:
         raise ValueError(f"Invalid facet: {facet}. Choose from '111', '100', or '110'.")
 elif crystal_structure == 'bcc':
@@ -86,6 +86,11 @@ fixed_indices = bottom_layer + second_layer
 fix_bottom_layers = ase.constraints.FixAtoms(indices=fixed_indices)
 slab.set_constraint(fix_bottom_layers)
 
+# constraints = sella.Constraints(slab)
+# for i in fixed_indices:
+#     constraints.fix_translation(i)
+
+
 if metal == 'Cr':
     # For Cr, we need to set the magnetic moments as antiferromagnetic
     z_levels = sorted(list(set(slab.positions[:, 2])))
@@ -113,7 +118,11 @@ elif metal == 'Fe':
     slab.set_initial_magnetic_moments([2.0] * len(slab))
 
 
-checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file('EquiformerV2-31M-S2EF-OC20-All+MD', local_cache='/home/moon/surface/tmp/fairchem_checkpoints/')
+checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
+    # 'EquiformerV2-31M-S2EF-OC20-All+MD',
+    'GemNet-OC-S2EFS-OC20+OC22',
+    local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
+)
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(checkpoint_path=checkpoint_path, cpu=True, seed=400)
 
 logging.info(f'Running slab relaxation for {metal} {facet} with lattice constant {lattice_constant} Å')
@@ -148,6 +157,13 @@ else:
 if not opt_complete:
     slab.calc = calc
     opt = ase.optimize.BFGS(slab, trajectory=trajectory_file, append_trajectory=True)
+    # opt = ase.optimize.GPMin(slab, trajectory=trajectory_file, append_trajectory=True)
+
+    # opt = sella.Sella(
+    #     slab,
+    #     constraints=constraints,
+    #     trajectory=trajectory_file,
+    # )
     opt.run(fmax=fmax, steps=10000)
 
 if plotting:

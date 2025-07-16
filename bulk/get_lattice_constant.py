@@ -26,12 +26,26 @@ crystal_structure = args.crystal_structure
 initial_guess = args.initial_guess
 plotting = True
 results_dir = '../results'  # Directory to save results
+
+use_slab = True  # Use slab for the calculation, otherwise use bulk
+
+output_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}', f'{metal}_{crystal_structure}_lattice_constant.yaml')
+if not os.path.exists(os.path.dirname(output_file)):
+    os.makedirs(os.path.dirname(output_file))
+
 # set up logging
 logging.basicConfig(level=logging.INFO)
 
 
 # Define the OCP calculator
-checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file('EquiformerV2-31M-S2EF-OC20-All+MD', local_cache='/home/moon/surface/tmp/fairchem_checkpoints/')
+# 'EquiformerV2-31M-S2EF-OC20-All+MD',
+checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
+    'GemNet-OC-S2EFS-nsn-OC20+OC22',
+    # 'EquiformerV2-31M-S2EF-OC20-All+MD',
+    local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
+)
+
+# checkpoint_path = '/home/moon/surface/tmp/fairchem_checkpoints/gnoc_oc22_oc20_all_s2ef.pt'
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(checkpoint_path=checkpoint_path, cpu=True, seed=400)
 
 
@@ -76,25 +90,51 @@ def run_eos_analysis(description, a0_init, half_range):
     energies = np.zeros_like(lattice_constants)
     volumes = np.zeros_like(lattice_constants)
     for i in range(len(energies)):
-        bulk = ase.build.bulk(metal, crystalstructure=crystal_structure, a=lattice_constants[i], cubic=True)
-        
-        if metal == 'Cr':
-            # Chromium has a magnetic ground state, so we need to set the spin polarization
-            bulk.set_initial_magnetic_moments([2.0, -2.0])
-        elif metal == 'Fe':
-            # Iron also has a magnetic ground state, so we need to set the spin polarization
-            bulk.set_initial_magnetic_moments([2.0, 2.0])
 
-        bulk.calc = calc
-        energies[i] = bulk.get_potential_energy()
-        volumes[i] = bulk.cell.volume
+        if use_slab:
+            # Build a slab for the metal
+            if crystal_structure == 'fcc':
+                slab = ase.build.fcc111(metal, size=(2, 2, 3), vacuum=10.0, a=lattice_constants[i])
+            elif crystal_structure == 'bcc':
+                slab = ase.build.bcc110(metal, size=(3, 3, 4), vacuum=10.0, a=lattice_constants[i])
+                if metal == 'Fe':
+                    # Chromium has a magnetic ground state, so we need to set the spin polarization
+                    slab.set_initial_magnetic_moments([2.0] * len(slab))
+                elif metal == 'Cr':
+                    slab.set_initial_magnetic_moments([2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,
+                                                       -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0,
+                                                       2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,])  # Set magnetic moments for bcc Cr
+
+            else:
+                raise ValueError(f"Unsupported crystal structure: {crystal_structure}")
+            slab.calc = calc
+            energies[i] = slab.get_potential_energy()
+            equivalent_bulk = ase.build.bulk(metal, crystalstructure=crystal_structure, a=lattice_constants[i], cubic=True)
+            volumes[i] = equivalent_bulk.cell.volume
+
+        else:
+            bulk = ase.build.bulk(metal, crystalstructure=crystal_structure, a=lattice_constants[i], cubic=True)
+
+            if metal == 'Cr':
+                # Chromium has a magnetic ground state, so we need to set the spin polarization
+                bulk.set_initial_magnetic_moments([2.0, -2.0])
+            elif metal == 'Fe':
+                # Iron also has a magnetic ground state, so we need to set the spin polarization
+                bulk.set_initial_magnetic_moments([2.0, 2.0])
+
+            bulk.calc = calc
+            energies[i] = bulk.get_potential_energy()
+            volumes[i] = bulk.cell.volume
 
     # Fit the equation of state
     eos = ase.eos.EquationOfState(volumes, energies, eos='sj')
     try:
         v0, e0, B = eos.fit()
+        if use_slab:
+            raise ValueError("Using slab, so EOS fit is not reliable, using minimum energy point as v0")
         if too_much_noise(lattice_constants, energies):
             raise ValueError("Too much noise in EOS, using minimum energy point as v0")
+        
     except ValueError as e:
         logging.error(f"Error fitting EOS: {e}")
         # just take the minimum energy point as v0, or the previous guess if the half range is too small
@@ -109,7 +149,7 @@ def run_eos_analysis(description, a0_init, half_range):
     if plotting:
         make_plot(lattice_constants, energies,
                   title=f'Energy of State Analysis for {metal} ({crystal_structure}) - {description}',
-                  filename=f'{metal}_{crystal_structure}_{description}_analysis.png',
+                  filename=os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}', f'{metal}_{crystal_structure}_{description}_analysis.png'),
                   a0=a0)
     return a0
 
@@ -118,6 +158,7 @@ levels_of_analysis = {
     # 'very_coarse': 1.500,
     'coarse': 0.500,
     'medium': 0.250,
+    'medium_fine': 0.125,
     'fine': 0.050,
     'very_fine': 0.015,
     'ultra_fine': 0.005
@@ -140,9 +181,7 @@ results = {
     'crystal_structure': crystal_structure,
     'final_lattice_constant': float(final_a0),
 }
-output_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}_lattice_constant.yaml')
-if not os.path.exists(os.path.dirname(output_file)):
-    os.makedirs(os.path.dirname(output_file))
+
 with open(output_file, 'w') as f:
     yaml.dump(results, f, default_flow_style=False)
 logging.info(f"Results saved to {output_file}")

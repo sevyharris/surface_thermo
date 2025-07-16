@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+import glob
 import pylab
 import yaml
 import sys
@@ -10,6 +11,7 @@ import matplotlib.pyplot  as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import NullFormatter, MaxNLocator, LogLocator
 import rmgpy.data.thermo
+import rmgpy.species
 
 # define constants
 R = 8.3144621E-3  # ideal Gas constant in kJ/mol-K
@@ -27,7 +29,7 @@ eV_to_kJpermole = 96.485 #convert eV/molecule to kJ/mol
 # T_switch = 1000.0 #K, switching temperature in NASA polynomial. Default. can overwrite.
 # site_occupation_number = 1 #number of sites occupied by adsorbate
 # unit_cell_area = 62.10456e-20/9.0 #m2 - using surface area per binding site (nine binding sites per cell)
-cutoff_frequency = 100.0 #cm^-1
+cutoff_frequency = 50.0 #cm^-1
 # twoD_gas = False
 
 # # declare a class for molecules
@@ -144,8 +146,6 @@ def get_vibrational_thermo(molecule,temperature):
 #create the main thermo function that calls the individual modes
 def thermo(molecule, temperature):
 
-    #
-    
     # call the subroutine for the vibrational partition function
     get_translation_thermo(molecule,temperature)
     get_vibrational_thermo(molecule,temperature)
@@ -437,11 +437,40 @@ def format_output(molecule):
 
 #-------------------------------------------------------------------------
 #Define the input parser
-def parse_input_file(input_file, molecule, element1):
+def parse_input_file(input_file, molecule):
 
     # read yaml file
     with open(input_file, 'r') as f:
         input_data = yaml.load(f, Loader=yaml.FullLoader)
+
+    molecule.adjacency_list = input_data['adjacency_list'].replace('Pt', 'X')
+
+
+
+    vdw_translater = {
+        'O': 'O',
+        '[H][H].Pt': 'H',
+    }
+
+    # get the binding atom
+    sp = rmgpy.species.Species().from_adjacency_list(molecule.adjacency_list)
+    print(f'Parsing species: {sp.smiles}')
+    for atom in sp.molecule[0].atoms:
+        if atom.is_surface_site():
+            bonds = sp.molecule[0].get_bonds(atom)
+
+            # if it's not vdW
+            if len(bonds) > 0:
+                element1 = list(bonds.keys())[0].symbol
+                print(f'binding atom is {element1}')
+            else:
+                # get the element with the biggest atomic number
+                possible_atoms = [atom for atom in sp.molecule[0].atoms if not atom.is_surface_site()]
+                element1 = possible_atoms[np.argmax([possible_atoms[i].number for i in range(len(possible_atoms))])].symbol
+
+                # element1 = vdw_translater[sp.smiles]
+                print(f'binding atom is {element1}')
+
 
     molecule.binding_atom1 = str(element1)
     molecule.name = input_data['name']
@@ -449,7 +478,7 @@ def parse_input_file(input_file, molecule, element1):
     molecule.composition = input_data['composition']
     N_adsorbate_atoms = 0
     for element in molecule.composition:
-        if element != 'Pt':
+        if element != 'Pt' and element != 'X':
             N_adsorbate_atoms += molecule.composition[element]  
 
     molecule.site_occupation_number = input_data['sites']
@@ -483,7 +512,7 @@ def parse_input_file(input_file, molecule, element1):
     molecule.ref_adatom_Eb2 = input_data['linear_scaling_binding_atom_B'][0] if 'linear_scaling_binding_atom_B' in input_data else None
     molecule.ref_adatom_Eb2_units = input_data['linear_scaling_binding_atom_B'][1] if 'linear_scaling_binding_atom_B' in input_data else None
     molecule.binding_atom2 = input_data.get('binding_atom_B', None)
-    molecule.adjacency_list = input_data['adjacency_list'].replace('Pt', 'X')
+    
 
 
 # -------------------------------------------------------------------------
@@ -495,30 +524,21 @@ element = 'O'
 new_output = open('my_new_cti.txt', 'w')
 
 
-filenames = [
-    # '/home/moon/surface/surface_thermo/thermo/H_sevy.yaml'
-    '/home/moon/surface/surface_thermo/results/thermo/H-ads.yaml',
-    '/home/moon/surface/surface_thermo/results/thermo/O-ads.yaml',
-    '/home/moon/surface/surface_thermo/results/thermo/N-ads.yaml',
-    '/home/moon/surface/surface_thermo/results/thermo/C-ads.yaml',
-]
-binding_elements = ['H', 'O', 'N', 'C']   # TODO feed this through the input file
-
+metal = 'Pt111'
+filenames = glob.glob(f'/home/moon/surface/surface_thermo/results/thermo/{metal}/{metal}_*-ads.yaml')
 
 # filenames = [
-#     # '/home/moon/surface/surface_thermo/thermo/H2O_katrin.yaml'
-#     '/home/moon/surface/surface_thermo/results/thermo/H-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/C-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/O-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/H2O-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/N-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/NH3-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/N2-ads.yaml',
-    
-#     # '/home/moon/surface/surface_thermo/results/thermo/H2-ads.yaml'
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_H-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_H2-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_O-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_OH-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_H2O-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_N-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_N2-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_NH3-ads.yaml',
+#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_C-ads.yaml',
 # ]
 
-# binding_elements = ['H', 'C', 'O', 'O', 'N', 'N', 'N']   # TODO feed this through the input file
 
 
 name_line = '\n'
@@ -529,7 +549,7 @@ counter = -1
 
 # compile it all into a single database and a single library which I'll call harris_butane
 # my_library_name = 'Pt_thermodata_adsorbates'
-my_library_name = 'Pt_thermodata_adsorbates_DFT'
+my_library_name = f'{metal}_gemnet'
 
 output_file = f'{my_library_name}.py'
 thermo_database = rmgpy.data.thermo.ThermoDatabase()
@@ -545,8 +565,9 @@ for index, filename in enumerate(filenames):
     # filename = species.strip()
 
     test = Molecule()
-    element = binding_elements[index]
-    parse_input_file(filename, test, element)
+    # element = binding_elements[index]
+    # parse_input_file(filename, test, element)
+    parse_input_file(filename, test)
     thermo(test, temperature)
     
     name_line += ' %s'%(test.name)

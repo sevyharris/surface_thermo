@@ -2,6 +2,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import rmgpy.constants
+import argparse
 import adsorbate_thermo
 # import rmgpy.species
 import sys
@@ -10,6 +11,9 @@ import util
 import yaml
 import ase.io.trajectory
 import logging
+
+import rmgpy.thermo
+import rmgpy.chemkin
 
 
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +31,38 @@ elif facet == '110':
     sites = ['ontop', 'hollow']
 
 
-adsorbate_label = 'H'
+# get adsorbate label from input
+parser = argparse.ArgumentParser(description='Run thermo calculation for adsorbate on metal facet.')
+parser.add_argument('--adsorbate', type=str, default='H', help='Adsorbate label (default: H)')
+args = parser.parse_args()
+adsorbate_label = args.adsorbate
+
+
+
+species_dictionary = rmgpy.chemkin.load_species_dictionary(
+    '../my_dictionary.txt'
+)
+
+translator = {
+    'H': 'HX',
+    'H2': 'H2X',
+    'O': 'OX',
+    'H2O': 'H2OX',
+    'CH3': 'CH3X',
+    # 'CH4': 'CH4X',
+    'CH': 'CHX',
+    'CH2': 'CH2X',
+    'C': 'CX',
+    'CO': 'OCX',
+    'CO2': 'CO2X',
+    'NH3': 'NH3X',
+    'NH2': 'H2NX',
+    'NH': 'HNX',
+    'N': 'NX',
+    'N2': 'N2X',
+}
+
+
 # adsorbate_label = 'H2'
 results_dir = f'../results'
 
@@ -249,31 +284,44 @@ print()
 
 print(*frequencies, sep=", ")
 # put the result through the adsorbate thermo calculator
+
+# Using my refactor of Katrin's code
 my_calc = adsorbate_thermo.AdsorbateThermoCalc(molecular_weight, frequencies, composition, heat_of_formation_0K_kJ_mol, twoD_gas=True)
 a_low, a_high = my_calc.get_thermo2()
-print(f'Adsorbate thermo coefficients for {adsorbate_label} on {metal}{facet} ({site}):')
-print(f'a_low: {a_low}')
-print(f'a_high: {a_high}')
-print()
+thermo_data = rmgpy.thermo.NASA(
+    polynomials = [
+        rmgpy.thermo.NASAPolynomial(coeffs=a_low, Tmin=(298.0,'K'), Tmax=(1000.0, 'K')),
+        rmgpy.thermo.NASAPolynomial(coeffs=a_high, Tmin=(1000.0,'K'), Tmax=(2000.0, 'K')),
+    ],
+    Tmin = (298.0, 'K'),
+    Tmax = (3000.0, 'K'),
+)
+# print(f'Adsorbate thermo coefficients for {adsorbate_label} on {metal}{facet} ({site}):')
+# print(thermo_data)
+# print(f'a_low: {a_low}')
+# print(f'a_high: {a_high}')
+# print()
 
-frequencies_str = [freq for freq in frequencies]
-frequencies_str.append('cm-1')  # Append the unit to the frequencies list
-frequencies_str = ', '.join(map(str, frequencies_str))  # Convert to a string for output
-frequencies_str = f'[{frequencies_str}]'  # Format as a list string
 
-# Save results to a file;
-my_result_file = os.path.join(results_dir, 'thermo', f'{adsorbate_label}-ads.dat')
-with open(my_result_file, 'w') as f:
-    f.write(f'name = {adsorbate_label}_ads\n')
-    f.write(f'DFT_binding_energy = [{binding_energy:.4f}, eV]\n')
-    f.write(f'heat_of_formation_0K = [{heat_of_formation_0K_kJ_mol:.4f}, kJ/mol]\n')
-    f.write(f'composition = {composition}\n')
-    f.write(f'sites = 1\n')
-    f.write(f'adsorbate_mass = [{molecular_weight:.4f}, amu]\n')
-    f.write(f'linear_scaling_binding_atom = [-2.479, eV]\n')
-    f.write(f'linear_scaling_gamma(X) = [1.0] \n')
-    f.write(f'linear_scaling_psi = [0, eV]\n')
-    f.write(f'frequencies = {frequencies_str}\n')
+# Katrin's original format
+# frequencies_str = [freq for freq in frequencies]
+# frequencies_str.append('cm-1')  # Append the unit to the frequencies list
+# frequencies_str = ', '.join(map(str, frequencies_str))  # Convert to a string for output
+# frequencies_str = f'[{frequencies_str}]'  # Format as a list string
+
+# # Save results to a file;
+# my_result_file = os.path.join(results_dir, 'thermo', f'{adsorbate_label}-ads.dat')
+# with open(my_result_file, 'w') as f:
+#     f.write(f'name = {adsorbate_label}_ads\n')
+#     f.write(f'DFT_binding_energy = [{binding_energy:.4f}, eV]\n')
+#     f.write(f'heat_of_formation_0K = [{heat_of_formation_0K_kJ_mol:.4f}, kJ/mol]\n')
+#     f.write(f'composition = {composition}\n')
+#     f.write(f'sites = 1\n')
+#     f.write(f'adsorbate_mass = [{molecular_weight:.4f}, amu]\n')
+#     f.write(f'linear_scaling_binding_atom = [-2.479, eV]\n')
+#     f.write(f'linear_scaling_gamma(X) = [1.0] \n')
+#     f.write(f'linear_scaling_psi = [0, eV]\n')
+#     f.write(f'frequencies = {frequencies_str}\n')
 
 # also save as yaml file
 my_result_yaml = os.path.join(results_dir, 'thermo', f'{adsorbate_label}-ads.yaml')
@@ -287,30 +335,10 @@ results_dict = {
     'linear_scaling_binding_atom': [-2.479, 'eV'],
     'linear_scaling_gamma(X)': [1.0],
     'linear_scaling_psi': [0, 'eV'],
-    'frequencies': [float(f) for f in frequencies] # Convert frequencies to float and append unit
+    'frequencies': [float(f) for f in frequencies], # Convert frequencies to float and append unit
+    'adjacency_list': species_dictionary[translator[adsorbate_label]].to_adjacency_list() if adsorbate_label in translator else None,
 }
 with open(my_result_yaml, 'w') as f:
     yaml.dump(results_dict, f, default_flow_style=False)
 
-
-
-
-
-
-
-# name = 'H_ads'
-# DFT_binding_energy = [-1.89E-01, 'eV']
-# heat_of_formation_0K = [-259.05, 'kJ/mol']
-# composition = {'H':2, 'C':0, 'N':0, 'O':1, 'Pt':1}
-# sites = 1
-# adsorbate_mass = [18.02, 'amu']
-# linear_scaling_binding_atom = [-3.5860E+00, 'eV']
-# linear_scaling_gamma(X) = [0]
-# linear_scaling_psi = [-0.189318, 'eV']
-# frequencies = [49.5, 68.6, 73.6, 102.0, 437.6, 452.9, 1596.3, 3675.6, 3787.0, 'cm-1']
-
-
-
-# heat_of_formation_0K = -259.05  # kJ/mol
-# my_calc = adsorbate_thermo.AdsorbateThermoCalc(molecular_weight, frequencies, composition, heat_of_formation_0K, twoD_gas=True)
-# a_low2, a_high2 = my_calc.get_thermo2()
+print(f'Results saved to {os.path.abspath(my_result_yaml)}')

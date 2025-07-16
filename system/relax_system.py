@@ -23,9 +23,13 @@ import matplotlib.pyplot as plt
 sys.path.append('/home/moon/surface/surface_thermo')
 import util
 
+
+
+
 # Initialize fairchem ocp calculator
 checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
-    'EquiformerV2-31M-S2EF-OC20-All+MD',
+    'GemNet-OC-S2EFS-nsn-OC20+OC22',
+    # 'EquiformerV2-31M-S2EF-OC20-All+MD',
     local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
 )
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(
@@ -104,9 +108,15 @@ else:
 
     # Load the adsorbate geometry from trajectory file
     adsorbate_trajectory_file = os.path.join(results_dir, 'gas', f'{adsorbate_label}.traj')
-    logging.info(f"Loading adsorbate from existing trajectory file: {adsorbate_trajectory_file}")
-    adsorbate_traj = ase.io.trajectory.Trajectory(adsorbate_trajectory_file, mode='r')
-    adsorbate = adsorbate_traj[-1]  # Get the last frame from the trajectory
+    if os.path.exists(adsorbate_trajectory_file):
+        logging.info(f"Loading adsorbate from existing trajectory file: {adsorbate_trajectory_file}")
+        adsorbate_traj = ase.io.trajectory.Trajectory(adsorbate_trajectory_file, mode='r')
+        try:
+            adsorbate = adsorbate_traj[-1]  # Get the last frame from the trajectory
+        except IndexError:
+            adsorbate = ase.build.molecule(adsorbate_label)
+    else:
+        adsorbate = ase.build.molecule(adsorbate_label)
     ase.build.add_adsorbate(system, adsorbate, 2.0, site)
 
 system.calc = calc
@@ -145,7 +155,10 @@ for i, atom in enumerate(system):
         adsorbate_indices.append(atom.index)
 
 
-vib = ase.vibrations.Vibrations(system, name=f'{metal}{facet}_{adsorbate_label}_{site}', indices=adsorbate_indices)
+vib = ase.vibrations.Vibrations(system, indices=adsorbate_indices)
+
+# vib = ase.vibrations.Vibrations(system, name=f'{metal}{facet}_{adsorbate_label}_{site}', indices=adsorbate_indices)
+vib.clean()  # Clean previous results
 vib.run()
 vib.summary()
 freq = vib.get_frequencies()

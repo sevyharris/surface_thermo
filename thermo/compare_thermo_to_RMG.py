@@ -111,13 +111,42 @@ assert mylibname in thermo_db.libraries
 
 rmg_items = [thermo_db.libraries['surfaceThermoPt111'].entries[x].item for x in thermo_db.libraries['surfaceThermoPt111'].entries]
 
-# +
-# Plot thermo
+# # Fe results
 
+entry.item
+
+# Plot thermo
+mylibname = 'Fe_thermodata_adsorbates_gemnet'
 # for entry in thermo_db.libraries[mylibname].entries:
 for entry_name in thermo_db.libraries[mylibname].entries:
-    print(entry.label)
+    
     entry = thermo_db.libraries[mylibname].entries[entry_name]
+    print(entry.label)
+    display(entry.item)
+    # also grab the RMG version of the molecule
+    rmg_idx = get_i_thing(entry.item, rmg_items)
+    rmg_data = [thermo_db.libraries['surfaceThermoFe110'].entries[x].data for x in thermo_db.libraries['surfaceThermoFe110'].entries][rmg_idx]
+    
+    
+    plot_thermos([entry.data, rmg_data], ['Calculation', 'RMG'])
+    plot_gibbs([entry.data, rmg_data], ['Calculation', 'RMG'])
+
+
+
+
+
+thermo_db.libraries
+
+# # DFT results
+
+# Plot thermo
+mylibname = 'Pt111_gemnet'
+# for entry in thermo_db.libraries[mylibname].entries:
+for entry_name in thermo_db.libraries[mylibname].entries:
+    
+    entry = thermo_db.libraries[mylibname].entries[entry_name]
+    print(entry.label)
+    display(entry.item)
     # also grab the RMG version of the molecule
     rmg_idx = get_i_thing(entry.item, rmg_items)
     rmg_data = [thermo_db.libraries['surfaceThermoPt111'].entries[x].data for x in thermo_db.libraries['surfaceThermoPt111'].entries][rmg_idx]
@@ -126,7 +155,25 @@ for entry_name in thermo_db.libraries[mylibname].entries:
     plot_thermos([entry.data, rmg_data], ['Calculation', 'RMG'])
     plot_gibbs([entry.data, rmg_data], ['Calculation', 'RMG'])
 
-# -
+
+# # Equiformer Results
+
+# Plot thermo
+mylibname = 'Pt_thermodata_adsorbates'
+# for entry in thermo_db.libraries[mylibname].entries:
+for entry_name in thermo_db.libraries[mylibname].entries:
+    
+    entry = thermo_db.libraries[mylibname].entries[entry_name]
+    print(entry.label)
+    display(entry.item)
+    # also grab the RMG version of the molecule
+    rmg_idx = get_i_thing(entry.item, rmg_items)
+    rmg_data = [thermo_db.libraries['surfaceThermoPt111'].entries[x].data for x in thermo_db.libraries['surfaceThermoPt111'].entries][rmg_idx]
+    
+    
+    plot_thermos([entry.data, rmg_data], ['Calculation', 'RMG'])
+    plot_gibbs([entry.data, rmg_data], ['Calculation', 'RMG'])
+
 
 thermo_db.libraries
 

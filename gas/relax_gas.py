@@ -23,7 +23,9 @@ else:
 
 # initialize fairchem ocp calculator
 checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
-    'EquiformerV2-31M-S2EF-OC20-All+MD',
+    # 'EquiformerV2-31M-S2EF-OC20-All+MD',
+    # 'gnoc_oc22_oc20_all_s2ef.pt',
+    'GemNet-OC-S2EFS-OC20+OC22',
     local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
 )
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(
@@ -50,7 +52,8 @@ opt = ase.optimize.BFGS(adsorbate, trajectory=trajectory_file, append_trajectory
 opt.run(fmax=0.01)
 
 # Run vibrational analysis
-vib = ase.vibrations.Vibrations(adsorbate, name=adsorbate_label)
+vib = ase.vibrations.Vibrations(adsorbate)
+# vib = ase.vibrations.Vibrations(adsorbate, name=adsorbate_label)
 vib.run()
 vib.summary()
 freq = vib.get_frequencies()
