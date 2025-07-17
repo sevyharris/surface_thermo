@@ -19,10 +19,24 @@ import rmgpy.chemkin
 
 logging.basicConfig(level=logging.INFO)
 
+
+
+
+# get adsorbate label from input
+parser = argparse.ArgumentParser(description='Run thermo calculation for adsorbate on metal facet.')
+parser.add_argument('--adsorbate', type=str, default='H', help='Adsorbate label (default: H)')
+parser.add_argument('--metal', type=str, default='Pt', help='Metal label (default: Pt)')
+parser.add_argument('--facet', type=str, default='111', help='Metal facet (default: 111)')
+
+args = parser.parse_args()
+adsorbate_label = args.adsorbate
+metal = args.metal
+facet = args.facet
+
 # script to convert binding energies to NASA polynomials
 # metal = 'Pt'
 # metal = 'Fe'
-facet = '111'
+# facet = '111'
 
 if facet == '111':
     # sites = ['ontop']  # TODO, finish converging bridge for Pt111
@@ -30,16 +44,10 @@ if facet == '111':
     # sites = ['ontop', 'hcp']
     # sites = ['hcp']
 elif facet == '110':
-    sites = ['ontop', 'hollow']
+    # sites = ['ontop', 'hollow', 'longbridge']
+    sites = ['ontop', 'hollow', 'longbridge', 'shortbridge']
 
 
-# get adsorbate label from input
-parser = argparse.ArgumentParser(description='Run thermo calculation for adsorbate on metal facet.')
-parser.add_argument('--adsorbate', type=str, default='H', help='Adsorbate label (default: H)')
-parser.add_argument('--metal', type=str, default='Pt', help='Metal label (default: Pt)')
-args = parser.parse_args()
-adsorbate_label = args.adsorbate
-metal = args.metal
 
 species_dictionary = rmgpy.chemkin.load_species_dictionary(
     '../my_dictionary.txt'
@@ -76,47 +84,107 @@ if not os.path.exists(os.path.dirname(my_result_yaml)):
 eV_to_kJ = 96.485332
 
 # -------------- Gather the binding energies ----------------
+possible_rotations = ['0.0', '90.0', '180.0']  # in degrees
 
 # Pick the site with the minimum energy
 site_energies = np.zeros(len(sites))
+site_rotations = np.zeros(len(sites), dtype=int)  # to store the rotation for each site
 for i, site in enumerate(sites):
-    system_traj_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
-                                    f'{metal}{facet}_{adsorbate_label}_{site}.traj')
-    system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
-    system = system_trajectory[-1]
-    assert util.atoms_converged(system), f'System {metal}{facet}_{adsorbate_label}_{site} is not converged'
-    system_energy = system.calc.results['energy']  # in eV
+    rot_energies = 1e5 + np.zeros(3)  # for 0, 90, 180 degree rotations
+    for j in range(3):
+        # load the system from the trajectory file
+        system_traj_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
+                                        f'{metal}{facet}_{adsorbate_label}_{site}_rot{float(j * 90.0):.1f}.traj')
+        if not os.path.exists(system_traj_file):
+            logging.warning(f'System trajectory file {system_traj_file} does not exist. Skipping site {site}.')
+            continue
 
-    # include the system ZPE
-    system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
-                                         f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
-    with open(system_vib_yaml_file, 'r') as f:
-        system_vib_data = yaml.load(f, Loader=yaml.FullLoader)  # Load the YAML file
-    system_zpe = system_vib_data['zpe']  # in eV
-    total_system_energy = system_energy + system_zpe  # in eV
+        system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
+        system = system_trajectory[-1]
+        if not util.atoms_converged(system):
+            logging.warning(f'System {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
+            continue
 
-    site_energies[i] = total_system_energy
 
-# # pick the hcp site if the bridge site is close (bridge likely fell into hcp)
-# if facet == '111' and np.abs(site_energies[1] - site_energies[2]) < 0.1:
-#     print(f'Bridge site is close to HCP site for {metal}{facet}, using HCP site instead.')
-#     site_energies[1] = site_energies[2]
+        # reject systems where the adsorbate is below the surface
+        # get all the atoms with symbol matching the adsorbate label
+        # metal_atoms = system[j for j in range(len(system)) if system[j].symbol == metal]
+        metal_atoms = [atom for atom in system if atom.symbol == metal]
+        highest_metal_z = np.max([atom.position[2] for atom in metal_atoms])  # highest z-coordinate of metal atoms
+
+        # highest_metal_z = np.max(metal_atoms.positions[:, 2])  # highest z-coordinate of metal atoms
+        # adsorbate_atoms = system[j for j in range(len(system)) if system[j].symbol != metal]
+        adsorbate_atoms = [atom for atom in system if atom.symbol != metal]
+        # adsorbate_z = np.min(adsorbate_atoms.positions[:, 2])
+        adsorbate_z = np.min([atom.position[2] for atom in adsorbate_atoms])  # lowest z-coordinate of adsorbate atoms
+
+        if adsorbate_z < highest_metal_z:
+            logging.warning(f'Adsorbate {adsorbate_label} is below the surface for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+            continue
+
+        system_energy = system.calc.results['energy']  # in eV
+
+        # include the system ZPE
+        system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
+                                            f'{metal}{facet}_{adsorbate_label}_{site}_rot{j * 90.0:.1f}_vib.yaml')
+        with open(system_vib_yaml_file, 'r') as f:
+            system_vib_data = yaml.load(f, Loader=yaml.FullLoader)  # Load the YAML file
+
+        system_zpe = system_vib_data['zpe']  # in eV
+        total_system_energy = system_energy + system_zpe  # in eV
+        rot_energies[j] = total_system_energy
+
+    site_energies[i] = np.min(rot_energies)
+    site_rotations[i] = np.argmin(rot_energies)  # store the rotation with the minimum energy
+
+    # system_traj_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
+    #                                 f'{metal}{facet}_{adsorbate_label}_{site}.traj')
+    # system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
+    # system = system_trajectory[-1]
+    # assert util.atoms_converged(system), f'System {metal}{facet}_{adsorbate_label}_{site} is not converged'
+    # system_energy = system.calc.results['energy']  # in eV
+
+    # # include the system ZPE
+    # system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
+    #                                      f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
+    # with open(system_vib_yaml_file, 'r') as f:
+    #     system_vib_data = yaml.load(f, Loader=yaml.FullLoader)  # Load the YAML file
+    # system_zpe = system_vib_data['zpe']  # in eV
+    # total_system_energy = system_energy + system_zpe  # in eV
+
+    # site_energies[i] = total_system_energy
 
 # Print the minimum energy site
 min_energy_site = sites[np.argmin(site_energies)]
-print(f'Minimum energy site for {adsorbate_label} on {metal}{facet}: {min_energy_site} {total_system_energy}')
+print(f'Minimum energy site for {adsorbate_label} on {metal}{facet}: {min_energy_site} {np.min(site_energies)} (includes ZPE)')
+
+rotation = site_rotations[np.argmin(site_energies)] * 90.0
+print(f'adsorbate was rotated by {rotation} degrees')
+
 
 # reload the system with the minimum energy site
 system_traj_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
-                                f'{metal}{facet}_{adsorbate_label}_{min_energy_site}.traj')
+                                f'{metal}{facet}_{adsorbate_label}_{min_energy_site}_rot{rotation}.traj')
 system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
 system = system_trajectory[-1]
 site = min_energy_site  # update the site to the minimum energy site
 system_energy = system.calc.results['energy']  # in eV
 
+
+
+# Save a picture of the relaxed system
+side_pic = os.path.join(results_dir, 'thermo', f'{metal}{facet}', 'images', f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotation}_side.png')
+top_pic = os.path.join(results_dir, 'thermo', f'{metal}{facet}', 'images', f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotation}_top.png')
+if not os.path.exists(os.path.dirname(side_pic)):
+    os.makedirs(os.path.dirname(side_pic), exist_ok=True)
+ase.io.write(side_pic, system, rotation='-90x,0y,0z')
+ase.io.write(top_pic, system, rotation='0x,0y,0z')
+
+
+
 # include the system ZPE
 system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
-                                     f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
+                                     f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotation}_vib.yaml')
 with open(system_vib_yaml_file, 'r') as f:
     system_vib_data = yaml.load(f, Loader=yaml.FullLoader)
 system_zpe = system_vib_data['zpe']  # in eV

@@ -443,8 +443,11 @@ def parse_input_file(input_file, molecule):
     with open(input_file, 'r') as f:
         input_data = yaml.load(f, Loader=yaml.FullLoader)
 
+    
+    if input_data['adjacency_list'] is None:
+        print(f'Error: adjacency_list is None for {input_file}. Skipping this file.')
+        return False
     molecule.adjacency_list = input_data['adjacency_list'].replace('Pt', 'X')
-
 
 
     vdw_translater = {
@@ -513,7 +516,7 @@ def parse_input_file(input_file, molecule):
     molecule.ref_adatom_Eb2_units = input_data['linear_scaling_binding_atom_B'][1] if 'linear_scaling_binding_atom_B' in input_data else None
     molecule.binding_atom2 = input_data.get('binding_atom_B', None)
     
-
+    return True
 
 # -------------------------------------------------------------------------
 # Main script to read species list and compute thermodynamic properties
@@ -524,7 +527,8 @@ element = 'O'
 new_output = open('my_new_cti.txt', 'w')
 
 
-metal = 'Pt111'
+metal = 'Fe111'
+# metal = 'Cr110'
 filenames = glob.glob(f'/home/moon/surface/surface_thermo/results/thermo/{metal}/{metal}_*-ads.yaml')
 
 # filenames = [
@@ -559,15 +563,42 @@ thermo_database.libraries[my_library_name].label = my_library_name
 thermo_database.libraries[my_library_name].entries = collections.OrderedDict()
 
 
+# make X
+sp = rmgpy.molecule.Molecule().from_adjacency_list("""
+1 X u0 p0 c0
+""")
+index = 0
+thermo_data = rmgpy.thermo.NASA(
+    polynomials = [
+        rmgpy.thermo.NASAPolynomial(coeffs=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], Tmin=(298.0,'K'), Tmax=(1000.0, 'K')),
+        rmgpy.thermo.NASAPolynomial(coeffs=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], Tmin=(1000.0,'K'), Tmax=(2000.0, 'K')),
+    ],
+    Tmin = (298.0, 'K'),
+    Tmax = (2000.0, 'K'),
+)
+# make a thermo entry for the database
+entry = rmgpy.data.base.Entry(
+    index=index,
+    label='X',
+    item=sp,
+    data=thermo_data,
+)
+thermo_database.libraries[my_library_name].entries[entry.label] = entry
+
+
 # for species in species_list:
 for index, filename in enumerate(filenames):
+    print(filename)
+
     counter += 1
     # filename = species.strip()
 
     test = Molecule()
     # element = binding_elements[index]
     # parse_input_file(filename, test, element)
-    parse_input_file(filename, test)
+    success = parse_input_file(filename, test)
+    if not success:
+        continue
     thermo(test, temperature)
     
     name_line += ' %s'%(test.name)
@@ -588,12 +619,12 @@ for index, filename in enumerate(filenames):
             rmgpy.thermo.NASAPolynomial(coeffs=test.a_high, Tmin=(1000.0,'K'), Tmax=(2000.0, 'K')),
         ],
         Tmin = (298.0, 'K'),
-        Tmax = (3000.0, 'K'),
+        Tmax = (2000.0, 'K'),
     )
 
     # make a thermo entry for the database
     entry = rmgpy.data.base.Entry(
-        index=index,
+        index=index + 1,
         label=test.name,
         item=sp,
         data=thermo_data,
