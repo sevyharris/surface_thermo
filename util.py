@@ -1,5 +1,7 @@
+import ase.build
 import numpy as np
 import ase.io.trajectory
+import ase.geometry.analysis
 
 # check converged
 def atoms_converged(atoms, fmax=0.01):
@@ -38,3 +40,32 @@ def get_final_energy(trajectory_file):
         traj = trajectory_file
     
     return traj[-1].calc.results['energy'] if traj else None
+
+
+def adsorbate_intact(system, adsorbate_label):
+    """
+    Check if the adsorbate is intact in the system.
+    
+    Parameters:
+    system (ase.Atoms): The system containing the adsorbate.
+    adsorbate_label (str): The label of the adsorbate to check.
+    
+    Returns:
+    bool: True if the adsorbate is intact, False otherwise.
+    """
+
+    original_adsorbate = ase.build.molecule(adsorbate_label)
+    original_analysis = ase.geometry.analysis.Analysis(original_adsorbate)
+    original_count = np.sum([len(x) for x in original_analysis.all_bonds[0]])
+
+    # assume metal is most popular element in the system
+    metal = max(set(atom.symbol for atom in system), key=lambda x: sum(atom.symbol == x for atom in system))
+    adsorbate_indices = [i for i in range(len(system)) if system[i].symbol != metal]
+
+    adsorbate = ase.Atoms()
+    for i in adsorbate_indices:
+        adsorbate += system[i]
+    
+    analysis = ase.geometry.analysis.Analysis(adsorbate)
+    count = np.sum([len(x) for x in analysis.all_bonds[0]])
+    return count == original_count

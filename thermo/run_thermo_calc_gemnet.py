@@ -105,21 +105,18 @@ for i, site in enumerate(sites):
             logging.warning(f'System {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
             continue
 
-
         # reject systems where the adsorbate is below the surface
-        # get all the atoms with symbol matching the adsorbate label
-        # metal_atoms = system[j for j in range(len(system)) if system[j].symbol == metal]
         metal_atoms = [atom for atom in system if atom.symbol == metal]
         highest_metal_z = np.max([atom.position[2] for atom in metal_atoms])  # highest z-coordinate of metal atoms
-
-        # highest_metal_z = np.max(metal_atoms.positions[:, 2])  # highest z-coordinate of metal atoms
-        # adsorbate_atoms = system[j for j in range(len(system)) if system[j].symbol != metal]
         adsorbate_atoms = [atom for atom in system if atom.symbol != metal]
-        # adsorbate_z = np.min(adsorbate_atoms.positions[:, 2])
         adsorbate_z = np.min([atom.position[2] for atom in adsorbate_atoms])  # lowest z-coordinate of adsorbate atoms
-
         if adsorbate_z < highest_metal_z:
             logging.warning(f'Adsorbate {adsorbate_label} is below the surface for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+            continue
+
+        # Reject systems where the adsorbate has fallen apart
+        if not util.adsorbate_intact(system, adsorbate_label):
+            logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
             continue
 
         system_energy = system.calc.results['energy']  # in eV
