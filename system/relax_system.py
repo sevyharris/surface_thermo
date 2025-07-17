@@ -46,6 +46,7 @@ parser.add_argument('--facet', type=str, default='111', help='Facet of the metal
 parser.add_argument('--adsorbate', type=str, default='H2', help='Adsorbate to use (default: H2)')
 parser.add_argument('--site', type=str, default='hcp', help='Adsorption site (default: hcp)')
 parser.add_argument('--plotting', action='store_true', help='Enable plotting of optimization energies')
+parser.add_argument('--rotate', type=str, default='0', help='Rotate the adsorbate degrees (default: 0)')
 args = parser.parse_args()
 
 
@@ -54,7 +55,7 @@ site = args.site
 metal = args.metal
 facet = args.facet
 plotting = args.plotting
-
+rotate = float(args.rotate)
 
 # assert adsorbate_label in ase.collections.g2.keys()
 # assert site in ['fcc', 'hcp', 'bridge', 'ontop'], f"Invalid site: {site}. Choose from 'fcc', 'hcp', 'bridge', or 'ontop'"
@@ -91,7 +92,7 @@ MAXSTEP = 500  # Maximum number of optimization steps -- change this later to be
 opt_complete = False  # Flag to check if the optimization is complete
 
 # Try loading the system from the trajectory file if it exists
-system_trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}.traj')
+system_trajectory_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotate}.traj')
 if not os.path.exists(os.path.dirname(system_trajectory_file)):
     os.makedirs(os.path.dirname(system_trajectory_file))
 if os.path.exists(system_trajectory_file):
@@ -115,12 +116,18 @@ else:
             adsorbate = adsorbate_traj[-1]  # Get the last frame from the trajectory
         except IndexError:
             adsorbate = ase.build.molecule(adsorbate_label)
+        if rotate != 0:
+            logging.info(f"Rotating adsorbate {adsorbate_label} by {rotate} degrees")
+            adsorbate.rotate(rotate, v='x', center='COM')
     else:
         adsorbate = ase.build.molecule(adsorbate_label)
+        if rotate != 0:
+            logging.info(f"Rotating adsorbate {adsorbate_label} by {rotate} degrees")
+            adsorbate.rotate(rotate, v='x', center='COM')
     ase.build.add_adsorbate(system, adsorbate, 2.0, site)
 
 system.calc = calc
-logfile = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'ase_{metal}{facet}_{adsorbate_label}_{site}.log')
+logfile = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'ase_{metal}{facet}_{adsorbate_label}_{site}_rot{rotate}.log')
 if not opt_complete:
     logging.info(f'Running optimization for {metal}{facet}_{adsorbate_label}_{site}')
     opt = ase.optimize.BFGS(system, logfile=logfile, trajectory=system_trajectory_file, append_trajectory=True)
@@ -170,13 +177,13 @@ result = {
     'frequencies': freq.tolist(),
     'zpe': float(vib.get_zero_point_energy()),
 }
-result_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
+result_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotate}_vib.yaml')
 with open(result_file, 'w') as f:
     yaml.dump(result, f, default_flow_style=False)
 
 
 # Save a picture of the relaxed system
-side_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_side.png')
-top_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_top.png')
+side_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotate}_side.png')
+top_pic = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'{metal}{facet}_{adsorbate_label}_{site}_rot{rotate}_top.png')
 ase.io.write(side_pic, system, rotation='-90x,0y,0z')
 ase.io.write(top_pic, system, rotation='0x,0y,0z')
