@@ -114,6 +114,23 @@ for i, site in enumerate(sites):
             logging.warning(f'Adsorbate {adsorbate_label} is below the surface for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
             continue
 
+        # reject systems where the adsorbate is too far away from the surface
+        THRESHOLD = 3.0  # in Angstroms
+        # if vdW, use a larger threshold
+        if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
+            THRESHOLD = 5.0
+
+        if adsorbate_z - highest_metal_z > THRESHOLD:
+            logging.warning(f'Adsorbate {adsorbate_label} is too far away from the surface for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+            continue
+
+        # reject vdW species that are too close to the surface
+        if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
+            if adsorbate_z - highest_metal_z < 2.0:
+                logging.warning(f'Adsorbate {adsorbate_label} is too close to the surface for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+                continue
+
+
         # Reject systems where the adsorbate has fallen apart
         if not util.adsorbate_intact(system, adsorbate_label):
             logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
@@ -237,11 +254,11 @@ gas = ase.build.molecule(adsorbate_label)
 molecular_weight = np.sum(gas.get_masses())  # in amu
 print(f'Molecular weight of {adsorbate_label}: {molecular_weight:.4f} amu')
 
-# read in the frequencies from the system vibrational yaml file
-vibrational_yaml_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
-                                     f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
+# # read in the frequencies from the system vibrational yaml file
+# vibrational_yaml_file = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', 
+#                                      f'{metal}{facet}_{adsorbate_label}_{site}_vib.yaml')
 # read yaml
-with open(vibrational_yaml_file, 'r') as f:
+with open(system_vib_yaml_file, 'r') as f:
     vib_data = yaml.load(f, Loader=yaml.FullLoader)
 
 # get magnitude to avoid imaginary components
@@ -269,7 +286,7 @@ zpe_N2 =  0.1458  # not real yet
 zpe_H2 = 0.270  # chao wrote 0.272  # eV
 
 # ATcT heats of formation at 0K
-Hf_CO_ATcT = -38.562  # kJ/mol
+Hf_CO_ATcT = -113.799  # kJ/mol
 Hf_H2O_ATcT = -238.938  # kJ/mol
 Hf_N2_ATcT = 0.0  # kJ/mol
 Hf_H2_ATcT = 0.0  # kJ/mol
