@@ -1,5 +1,5 @@
-import ase.build
 import numpy as np
+import scipy.cluster.vq
 import ase.io.trajectory
 import ase.geometry.analysis
 
@@ -69,3 +69,92 @@ def adsorbate_intact(system, adsorbate_label):
     analysis = ase.geometry.analysis.Analysis(adsorbate)
     count = np.sum([len(x) for x in analysis.all_bonds[0]])
     return count == original_count
+
+
+def is_vdW_species(species):
+    """
+    Check if the species is a van der Waals species.
+    
+    Parameters:
+    species (str): The species to check.
+    
+    Returns:
+    bool: True if the species is a van der Waals species, False otherwise.
+    """
+    if not species.contains_surface_site():
+        return False
+    bonded_to_surface = False
+    for atom in species.molecule[0].atoms:
+        if atom.is_bonded_to_surface():
+            bonded_to_surface = True
+    return not bonded_to_surface
+
+def enumerate_layers(atoms):
+    """
+    Enumerate the layers in the slab based on the z-coordinates of the atoms.
+    
+    Parameters:
+    atoms (ase.Atoms): The slab atoms.
+    
+    Returns:
+    list: A list of layer indices.
+    """
+
+    def compute_error(atoms, centroids, labels):
+        a = 1.0  # characteristic length between layers
+        error = 0
+        assert len(atoms) == len(labels)
+        max_mass = np.max(atoms.get_masses())
+        for i in range(len(atoms)):
+            error += np.float_power(atoms[i].position[2] - centroids[labels[i]], 2.0) * atoms.get_masses()[i] / max_mass
+
+        # get centroid's nearest neighbor
+        centroid_min_distances = np.zeros_like(centroids) + np.inf
+        for i in range(len(centroids)):
+            for j in range(len(centroids)):
+                if i == j:
+                    continue
+                if np.abs(centroids[i] - centroids[j]) < centroid_min_distances[i]:
+                    centroid_min_distances[i] = np.abs(centroids[i] - centroids[j])
+
+        # add penalty for non-uniformity and deviation from characteristic length
+        nonuniformity_error = np.sum(np.float_power(centroid_min_distances - np.median(centroid_min_distances), 2.0))
+        characteristic_length_error = 10 * np.sum(np.float_power(centroid_min_distances - a, 2.0))
+        error += nonuniformity_error + characteristic_length_error
+        return error
+
+    Zs = np.array([atom.position[2] for atom in atoms])
+
+    nlayers = np.arange(2, 32)
+    errors = np.zeros_like(nlayers) + np.inf
+    for i, nlayer in enumerate(nlayers):
+        centroid, label = scipy.cluster.vq.kmeans2(Zs, nlayer)
+
+        # if a bin only contains 1, break here
+        bin_counts = np.zeros(nlayer)
+        for j in range(len(Zs)):
+            bin_counts[label[j]] += 1
+
+        if 1 in bin_counts or 0 in bin_counts:
+            break
+
+        errors[i] = compute_error(atoms, centroid, label)
+
+    
+    best_nlayer = nlayers[np.argmin(errors)]
+    centroid, label = scipy.cluster.vq.kmeans2(Zs, best_nlayer)
+    print(centroid)
+
+
+    # sort the labels by the centroid positions
+    indices = np.arange(len(centroid))
+    sorted_indices = [x for _, x in sorted(zip(centroid, indices))][::-1]
+
+    new_centroid = [centroid[i] for i in sorted_indices]
+
+    new_label = [new_centroid.index(centroid[i]) for i in label]
+
+    # print(label)
+    # label = np.array([sorted_indices[i] for i in label])
+    # print(label)
+    return list(np.array(new_label) + 1) # make it 1-indexed
