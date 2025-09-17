@@ -46,8 +46,13 @@ with open(bulk_yaml_file, 'r') as f:
     lattice_constant = data.get('final_lattice_constant', None)
 logging.info(f"Loaded lattice constant for {metal} {crystal_structure}: {lattice_constant} Å")
 
-fmax = 0.01
-vacuum = 7.5
+# fmax = 0.01
+fmax = 0.05
+if metal == 'Fe':
+    fmax = 0.1
+
+# vacuum = 7.5
+vacuum = 10.0
 if crystal_structure == 'fcc':
     if facet == '111':
         slab = ase.build.fcc111(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
@@ -56,12 +61,16 @@ if crystal_structure == 'fcc':
     elif facet == '110':
         slab = ase.build.fcc110(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
         if metal == 'Fe':
-            slab = ase.build.fcc110(metal, size=(4, 4, 4), vacuum=vacuum, a=lattice_constant)
+            # slab = ase.build.fcc110(metal, size=(4, 4, 4), vacuum=vacuum, a=lattice_constant)
+            slab = ase.build.fcc110(metal, size=(3, 3, 9), vacuum=vacuum, a=lattice_constant)
     else:
         raise ValueError(f"Invalid facet: {facet}. Choose from '111', '100', or '110'.")
 elif crystal_structure == 'bcc':
     if facet == '110':
         slab = ase.build.bcc110(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
+        if metal == 'Fe':
+            # slab = ase.build.fcc110(metal, size=(4, 4, 4), vacuum=vacuum, a=lattice_constant)
+            slab = ase.build.bcc110(metal, size=(3, 3, 9), vacuum=vacuum, a=lattice_constant)
     elif facet == '100':
         slab = ase.build.bcc100(metal, size=(3, 3, 4), vacuum=vacuum, a=lattice_constant)
     elif facet == '211':
@@ -71,24 +80,21 @@ elif crystal_structure == 'bcc':
 
 
 # Fix the bottom two layers
-bottom_layer = []
-second_layer = []
+LAYERS_TO_FIX = 2
+if metal == 'Fe' and crystal_structure == 'bcc':
+    LAYERS_TO_FIX = 7
+
 fixed_indices = []
+
 z_values = list(set([pos[2] for pos in slab.get_positions()]))
 z_values.sort()
+fixed_z_values = z_values[:LAYERS_TO_FIX]
+for n, pos in enumerate(slab.get_positions()):
+    if pos[2] in fixed_z_values:
+        fixed_indices.append(slab[n].index)
 
-for i, pos in enumerate(slab.get_positions()):
-    if pos[2] == z_values[0]:
-       bottom_layer.append(slab[i].index)
-    if pos[2] == z_values[1]:
-       second_layer.append(slab[i].index)
-fixed_indices = bottom_layer + second_layer
 fix_bottom_layers = ase.constraints.FixAtoms(indices=fixed_indices)
 slab.set_constraint(fix_bottom_layers)
-
-# constraints = sella.Constraints(slab)
-# for i in fixed_indices:
-#     constraints.fix_translation(i)
 
 
 if metal == 'Cr':

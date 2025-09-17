@@ -31,12 +31,22 @@ logging.basicConfig(level=logging.INFO)
 # Start by reading in .cif file for Cr2O3
 cif_file = 'Cr2O3.cif'
 slab = ase.io.cif.read_cif('Cr2O3.cif')
-logging.info(f"Loaded Cr2O3 from CIF fiele: {cif_file}")
+logging.info(f"Loaded Cr2O3 from CIF file: {cif_file}")
+
+
+# assign the layers in the slab, this is only approximate for custom structures
+layers = util.enumerate_layers(slab)
 
 # set tags to something so the calculator will work
-tags = slab.get_tags()
-tags[1] = 1
-slab.set_tags(tags)
+slab.set_tags(layers)
+
+# get the highest atom in the group and make sure it has a tag of 1 (top layer atom)
+indices = np.arange(len(slab))
+heights = [atom.position[2] for atom in slab]
+sorted_order = [x for _, x in sorted(zip(heights, indices))][::-1]
+assert slab.get_tags()[sorted_order[0]] == 1
+slab.info['top layer atom index'] = sorted_order[0]
+
 
 # stack unit cells in x, y, and z directions to make a slab
 slab = ase.build.stack(slab, slab, axis=0)
@@ -66,7 +76,8 @@ original = copy.deepcopy(slab)
 
 
 # Run optimization
-fmax = 0.01
+# fmax = 0.01
+fmax = 0.05
 max_steps = 10000
 
 trajectory_file = os.path.join(results_dir, 'slab', f'Cr2O3_z_slab.traj')
@@ -120,6 +131,11 @@ if plotting:
 
 logging.info(f"Max displacement of atoms during relaxation: {np.max(np.linalg.norm(slab.get_positions() - original.get_positions(), axis=1))} Å")
 logging.info(f"Median displacement of atoms during relaxation: {np.median(np.linalg.norm(slab.get_positions() - original.get_positions(), axis=1))} Å")
+
+# fails to draw if occupancy is in slab.info
+if 'occupancy' in slab.info:
+    logging.info(f"Removing occupancy information from slab info")
+    slab.info.pop('occupancy')
 
 
 # save a picture of the relaxed slab
