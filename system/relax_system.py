@@ -87,7 +87,11 @@ def load_slab_from_trajectory(metal, facet, results_dir):
 slab = load_slab_from_trajectory(metal, facet, results_dir)
 
 
-fmax = 0.01
+# fmax = 0.01
+fmax = 0.05
+if metal == 'Fe' and facet == '110':
+    fmax = 0.1
+
 MAXSTEP = 500  # Maximum number of optimization steps -- change this later to be larger
 opt_complete = False  # Flag to check if the optimization is complete
 
@@ -124,7 +128,33 @@ else:
         if rotate != 0:
             logging.info(f"Rotating adsorbate {adsorbate_label} by {rotate} degrees")
             adsorbate.rotate(rotate, v='x', center='COM')
-    ase.build.add_adsorbate(system, adsorbate, 2.0, site)
+
+
+    # calculate N energies and set at the lowest energy height
+    logging.info(f"Finding optimal height for {adsorbate_label} on {metal}{facet} at {site}")
+    heights = np.linspace(0.5, 3.0, 7)
+    height_energies = np.zeros(len(heights))
+    test_system = copy.deepcopy(slab)
+    for i, height in enumerate(heights):
+        ase.build.add_adsorbate(test_system, adsorbate, height, site)
+        test_system.calc = calc
+        height_energies[i] = test_system.get_potential_energy()
+        # remove the adsorbate for the next iteration
+        test_system = test_system[:len(slab)]
+    best_height = heights[np.argmin(height_energies)]
+    logging.info(f"Best height for {adsorbate_label} on {metal}{facet} at {site} is {best_height:.2f} Å")
+
+    ase.build.add_adsorbate(system, adsorbate, best_height, site)
+
+
+# system_constraint_indices = system.constraints[0].get_indices()
+# # clear all constrants
+# system.set_constraint()
+# # fix everything but the adsorbate
+# fixed_indices = [i for i in range(len(slab))]
+# system.set_constraint(ase.constraints.FixAtoms(indices=fixed_indices))
+# now, fix ALL the slab atoms in the system
+
 
 system.calc = calc
 logfile = os.path.join(results_dir, 'system', f'{metal}{facet}_{adsorbate_label}', f'ase_{metal}{facet}_{adsorbate_label}_{site}_rot{rotate}.log')
