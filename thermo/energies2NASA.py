@@ -123,6 +123,8 @@ def get_vibrational_thermo(molecule,temperature):
                 dH_vib[t] += 0.0
                 Cv_vib[t] += 0.0
             else:
+                # if nu < 50:  # mine
+                #     nu = 50.0 #avoid numerical issues with very low frequencies
                 x = nu * units / temp #cm^-1 * K cm / K = dimensionless
                 Q_vib[t]  *= 1.0 / (1.0 - np.exp( - x) )
                 S_vib[t]  += -np.log( 1.0 - np.exp( - x ) ) + x * np.exp( - x) / (1.0 - np.exp( - x) ) 
@@ -509,6 +511,7 @@ def parse_input_file(input_file, molecule):
     # N_freq_computed = 3 * N_adsorbate_atoms
     if molecule.frequencies[1] < cutoff_frequency:
         #print("switching to 2D-gas for 2 lowest modes for %s"%name
+        print(f'Switching to 2D-gas for 2 lowest modes for {molecule.name}')
         molecule.twoD_gas = True
 
 
@@ -527,8 +530,15 @@ element = 'O'
 new_output = open('my_new_cti.txt', 'w')
 
 
-metal = 'Fe111'
+# -------------- mavrikakis ---------------------
+# filenames = glob.glob(f'/home/moon/surface/surface_thermo/results/thermo/mavrikakis/*-ads.yaml')
+
+
+
+# # -------------- regular OCP operation ----------
+# metal = 'Pt111'
 # metal = 'Cr110'
+metal = 'Fe110'
 filenames = glob.glob(f'/home/moon/surface/surface_thermo/results/thermo/{metal}/{metal}_*-ads.yaml')
 
 # filenames = [

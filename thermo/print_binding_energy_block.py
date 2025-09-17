@@ -35,7 +35,7 @@ for atom in ['H', 'C', 'O', 'N']:
         assert units == 'kJ/mol', f"Expected units 'kJ/mol', got {units}"
 
         binding_energy = heat_of_formation_0K / 96.485 - ATcT_energies[atom]
-        print(f"\t{atom}: ({binding_energy}, 'eV/molecule'),")
+        print(f"\t'{atom}': ({binding_energy}, 'eV/molecule'),")
 print('}')
 
 

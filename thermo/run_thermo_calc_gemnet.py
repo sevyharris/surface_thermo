@@ -33,6 +33,9 @@ adsorbate_label = args.adsorbate
 metal = args.metal
 facet = args.facet
 
+fmax = 0.05
+if metal == 'Fe' and facet == '110':
+    fmax = 0.1  # Fe110 is hard to converge
 # script to convert binding energies to NASA polynomials
 # metal = 'Pt'
 # metal = 'Fe'
@@ -71,6 +74,8 @@ translator = {
     'NH': 'HNX',
     'N': 'NX',
     'N2': 'N2X',
+    'O2': 'O2X',
+    'NO': 'NOX',
 }
 
 
@@ -101,7 +106,7 @@ for i, site in enumerate(sites):
 
         system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
         system = system_trajectory[-1]
-        if not util.atoms_converged(system):
+        if not util.atoms_converged(system, fmax=fmax):
             logging.warning(f'System {metal}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
             continue
 
