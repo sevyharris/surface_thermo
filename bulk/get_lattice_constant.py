@@ -13,21 +13,26 @@ import fairchem.core.common.relaxation.ase_utils
 import matplotlib.pyplot as plt
 
 
+
+
 # read in the metal from command line
 parser = argparse.ArgumentParser(description='Calculate the lattice constant of a metal.')
 parser.add_argument('--metal', type=str, default='Pt', help='Metal to use for the calculation (default: Pt)')
 parser.add_argument('--crystal_structure', type=str, default='fcc', help='Crystal structure (default: fcc)')
 parser.add_argument('--initial_guess', type=float, default=3.5, help='Initial guess for the lattice constant (default: 3.5 Å)')
+parser.add_argument('--facet', type=str, default='111', help='Facet if using the slab instead of bulk (default: 111)')
 
 args = parser.parse_args()
 
 metal = args.metal
 crystal_structure = args.crystal_structure
 initial_guess = args.initial_guess
+facet = args.facet
 plotting = True
 results_dir = '../results'  # Directory to save results
 
 use_slab = True  # Use slab for the calculation, otherwise use bulk
+#use_slab = False  # Use slab for the calculation, otherwise use bulk
 
 output_file = os.path.join(results_dir, 'bulk', f'{metal}_{crystal_structure}', f'{metal}_{crystal_structure}_lattice_constant.yaml')
 if not os.path.exists(os.path.dirname(output_file)):
@@ -39,10 +44,13 @@ logging.basicConfig(level=logging.INFO)
 
 # Define the OCP calculator
 # 'EquiformerV2-31M-S2EF-OC20-All+MD',
+local_cache = os.environ['FAIRCHEM_LOCAL_CACHE']
 checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
     'GemNet-OC-S2EFS-nsn-OC20+OC22',
     # 'EquiformerV2-31M-S2EF-OC20-All+MD',
-    local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
+    # local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
+    # local_cache='/projects/westgroup/harris.se/surface_thermo/tmp/fairchem_checkpoints/'
+    local_cache=local_cache
 )
 
 # checkpoint_path = '/home/moon/surface/tmp/fairchem_checkpoints/gnoc_oc22_oc20_all_s2ef.pt'
@@ -94,16 +102,22 @@ def run_eos_analysis(description, a0_init, half_range):
         if use_slab:
             # Build a slab for the metal
             if crystal_structure == 'fcc':
-                slab = ase.build.fcc111(metal, size=(2, 2, 3), vacuum=10.0, a=lattice_constants[i])
+                slab = ase.build.fcc111(metal, size=(3, 3, 4), vacuum=10.0, a=lattice_constants[i])
             elif crystal_structure == 'bcc':
-                slab = ase.build.bcc110(metal, size=(3, 3, 4), vacuum=10.0, a=lattice_constants[i])
-                if metal == 'Fe':
-                    # Chromium has a magnetic ground state, so we need to set the spin polarization
-                    slab.set_initial_magnetic_moments([2.0] * len(slab))
-                elif metal == 'Cr':
-                    slab.set_initial_magnetic_moments([2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,
-                                                       -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0,
-                                                       2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,])  # Set magnetic moments for bcc Cr
+                if facet == '110':
+                    slab = ase.build.bcc110(metal, size=(3, 3, 4), vacuum=10.0, a=lattice_constants[i])
+                elif facet == '100':
+                    slab = ase.build.bcc100(metal, size=(3, 3, 4), vacuum=10.0, a=lattice_constants[i])
+                else:
+                    print('must specify a facet')       
+
+                #if metal == 'Fe':
+                #   # Chromium has a magnetic ground state, so we need to set the spin polarization
+                #    slab.set_initial_magnetic_moments([2.0] * len(slab))
+                #elif metal == 'Cr':
+                #    slab.set_initial_magnetic_moments([2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,
+                #                                       -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0, -2.0,
+                #                                       2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,])  # Set magnetic moments for bcc Cr
 
             else:
                 raise ValueError(f"Unsupported crystal structure: {crystal_structure}")
@@ -117,12 +131,15 @@ def run_eos_analysis(description, a0_init, half_range):
 
             if metal == 'Cr':
                 # Chromium has a magnetic ground state, so we need to set the spin polarization
-                bulk.set_initial_magnetic_moments([2.0, -2.0])
+                pass
+                # bulk.set_initial_magnetic_moments([2.0, -2.0])
             elif metal == 'Fe':
                 # Iron also has a magnetic ground state, so we need to set the spin polarization
+                pass
                 bulk.set_initial_magnetic_moments([2.0, 2.0])
 
             bulk.calc = calc
+
             energies[i] = bulk.get_potential_energy()
             volumes[i] = bulk.cell.volume
 
