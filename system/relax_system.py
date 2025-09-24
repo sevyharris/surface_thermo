@@ -202,13 +202,14 @@ for i, atom in enumerate(system):
         adsorbate_indices.append(atom.index)
 
 
-vib = ase.vibrations.Vibrations(system, indices=adsorbate_indices)
-
-# vib = ase.vibrations.Vibrations(system, name=f'{metal}{facet}_{adsorbate_label}_{site}', indices=adsorbate_indices)
+# vib = ase.vibrations.Vibrations(system, indices=adsorbate_indices)
+vib_dir = f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}'
+vib = ase.vibrations.Vibrations(system, name=vib_dir, indices=adsorbate_indices)
 vib.clean()  # Clean previous results
 vib.run()
 vib.summary()
 freq = vib.get_frequencies()
+
 logging.info(f'Vibrational frequencies for {metal} {crystal_structure}{facet}_{adsorbate_label}_{site}: {freq} (cm^-1)')
 logging.info(f'ZPE for {metal} {crystal_structure}{facet}_{adsorbate_label}_{site}: {vib.get_zero_point_energy()} eV')
 
@@ -220,6 +221,9 @@ result = {
 result_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotate}_vib.yaml')
 with open(result_file, 'w') as f:
     yaml.dump(result, f, default_flow_style=False)
+
+vib.clean()  # Clean results after the fact
+os.rmdir(vib_dir)
 
 
 # Save a picture of the relaxed system
