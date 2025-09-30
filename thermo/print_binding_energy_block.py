@@ -5,14 +5,23 @@ import os
 
 # take in the metal and facet as arguments
 parser = argparse.ArgumentParser(description='Print binding energy block for a system.')
-parser.add_argument('--metal', type=str, required=True, help='Metal to use for the calculation')
-parser.add_argument('--facet', type=str, required=True, help='Facet of the metal slab')
+parser.add_argument('--metal', type=str, required=False, default='', help='Metal to use for the calculation')
+parser.add_argument('--facet', type=str, required=False, default='', help='Facet of the metal slab')
+parser.add_argument('--crystal_structure', type=str, required=False, default='', help='Crystal structure of the metal slab')
+parser.add_argument('--slabname', type=str, required=False, default='', help='Custom slabname of the metal slab')
 
 
 # parse the argumentsargs = parser.parse_args()
 args = parser.parse_args()
 metal = args.metal
 facet = args.facet
+crystal_structure = args.crystal_structure
+slabname = args.slabname
+
+if slabname == '':  # must provide slab name or metal, facet, crystal_structure
+    assert metal != ''
+    assert facet != ''
+    assert crystal_structure != ''
 
 
 # binding energy is the heat of formation of the system minus the ATcT heat of formation of the gas
@@ -26,7 +35,10 @@ ATcT_energies = {
 # read in the H and metal heat of formation from the yaml file
 print('bindingEnergies = {')
 for atom in ['H', 'C', 'O', 'N']:
-    thermo_file = os.path.join(os.path.dirname(__file__), f'../results/thermo/{metal}{facet}/{metal}{facet}_{atom}-ads.yaml')
+    if slabname:
+        thermo_file = os.path.join(os.path.dirname(__file__), f'../results/thermo/{slabname}/{slabname}_{atom}-ads.yaml')
+    else:
+        thermo_file = os.path.join(os.path.dirname(__file__), f'../results/thermo/{metal}_{crystal_structure}{facet}/{metal}_{crystal_structure}{facet}_{atom}-ads.yaml')
     with open(thermo_file, 'r') as f:
         data = yaml.safe_load(f)
 
@@ -39,10 +51,10 @@ for atom in ['H', 'C', 'O', 'N']:
 print('}')
 
 
-# output format like this 
-bindingEnergies = {
-    'C': (-6.102800985, 'eV/molecule'),
-    'H': (-2.750942338, 'eV/molecule'),
-    'O': (-6.130366585, 'eV/molecule'),
-    'N': (-5.987266461, 'eV/molecule'),
-}
+# # output format like this
+# bindingEnergies = {
+#     'C': (-6.102800985, 'eV/molecule'),
+#     'H': (-2.750942338, 'eV/molecule'),
+#     'O': (-6.130366585, 'eV/molecule'),
+#     'N': (-5.987266461, 'eV/molecule'),
+# }

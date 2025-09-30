@@ -524,46 +524,20 @@ def parse_input_file(input_file, molecule):
 # -------------------------------------------------------------------------
 # Main script to read species list and compute thermodynamic properties
 
-species_list = ['H2O']
-element = 'O'
-
+metal = 'Pt'
+crystal_structure = 'fcc'
+facet = '111'
+filenames = glob.glob(os.path.join(os.environ['SURFACE_THERMO_DIR'], f'results/thermo/{metal}_{crystal_structure}{facet}/{metal}_{crystal_structure}{facet}_*-ads.yaml'))
 new_output = open('my_new_cti.txt', 'w')
-
-
-# -------------- mavrikakis ---------------------
-# filenames = glob.glob(f'/home/moon/surface/surface_thermo/results/thermo/mavrikakis/*-ads.yaml')
-
-
-
-# # -------------- regular OCP operation ----------
-# metal = 'Pt111'
-# metal = 'Cr110'
-metal = 'Fe110'
-filenames = glob.glob(f'/home/moon/surface/surface_thermo/results/thermo/{metal}/{metal}_*-ads.yaml')
-
-# filenames = [
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_H-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_H2-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_O-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_OH-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_H2O-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_N-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_N2-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_NH3-ads.yaml',
-#     '/home/moon/surface/surface_thermo/results/thermo/Fe111/Fe111_C-ads.yaml',
-# ]
-
 
 
 name_line = '\n'
 species_line = '\n'
-
 counter = -1
-
 
 # compile it all into a single database and a single library which I'll call harris_butane
 # my_library_name = 'Pt_thermodata_adsorbates'
-my_library_name = f'{metal}_gemnet'
+my_library_name = f'{metal}_{crystal_structure}{facet}_gemnet'
 
 output_file = f'{my_library_name}.py'
 thermo_database = rmgpy.data.thermo.ThermoDatabase()
@@ -595,8 +569,11 @@ entry = rmgpy.data.base.Entry(
 )
 thermo_database.libraries[my_library_name].entries[entry.label] = entry
 
+HX = rmgpy.species.Species().from_adjacency_list("""
+    1 X  u0 p0 c0 {2,S}
+    2 H  u0 p0 c0 {1,S}
+""")
 
-# for species in species_list:
 for index, filename in enumerate(filenames):
     print(filename)
 
@@ -604,8 +581,6 @@ for index, filename in enumerate(filenames):
     # filename = species.strip()
 
     test = Molecule()
-    # element = binding_elements[index]
-    # parse_input_file(filename, test, element)
     success = parse_input_file(filename, test)
     if not success:
         continue
@@ -642,6 +617,21 @@ for index, filename in enumerate(filenames):
 
     thermo_database.libraries[my_library_name].entries[entry.label] = entry
 
+    if sp.is_isomorphic(HX.molecule[0]):
+        HX_thermo = rmgpy.thermo.NASA(
+            polynomials = [
+                rmgpy.thermo.NASAPolynomial(coeffs=[-1.96702988E+00, 1.67920714E-02,  -2.50314139E-05, 1.80485455E-08, -5.11491197E-12,  -3.21277026E+03, 7.68211257E+00], Tmin=(298.0,'K'), Tmax=(1000.0, 'K')),
+                rmgpy.thermo.NASAPolynomial(coeffs=[2.71968546E+00, -1.07696656E-03,  2.00193294E-06, -1.12865983E-09, 2.11269165E-13,  -4.24701712E+03, -1.52793490E+01], Tmin=(1000.0,'K'), Tmax=(2000.0, 'K')),
+            ],
+            Tmin = (298.0, 'K'),
+            Tmax = (2000.0, 'K'),
+        )
+        print(f'\tKatrin HX: {HX_thermo.get_free_energy(1000) / 4184.0} kcal/mol')
+        print(f'\tYour HX: {thermo_data.get_free_energy(1000) / 4184.0} kcal/mol')
+        print(thermo_data)
+
+
+# the real writing
 thermo_database.save_libraries(my_library_name)
 
 
