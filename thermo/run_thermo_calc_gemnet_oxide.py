@@ -27,39 +27,37 @@ logging.basicConfig(level=logging.INFO)
 
 
 # get adsorbate label from input
-parser = argparse.ArgumentParser(description='Run thermo calculation for adsorbate on metal facet.')
+parser = argparse.ArgumentParser(description='Run thermo calculation for adsorbate on oxide facet.')
 parser.add_argument('--adsorbate', type=str, default='H', help='Adsorbate label (default: H)')
-parser.add_argument('--metal', type=str, default='Pt', help='Metal label (default: Pt)')
-parser.add_argument('--crystal_structure', type=str, default='fcc', help='Crystal structure (default: fcc)')
-parser.add_argument('--facet', type=str, default='111', help='Metal facet (default: 111)')
+parser.add_argument('--slabname', type=str, default='Cr2O3_z', help='Oxide label (default: Cr2O3_z)')
+
 
 args = parser.parse_args()
 adsorbate_label = args.adsorbate
-metal = args.metal
-crystal_structure = args.crystal_structure
-facet = args.facet
+slabname = args.slabname
 
 fmax = 0.05
 
-# need to specify crystal structure too
-sites = []
-tmp_slab = None
-if crystal_structure == 'fcc':
-    if facet == '111':
-        tmp_slab = ase.build.fcc111('Pt', (3, 3, 4))
-    elif facet == '110':
-        tmp_slab = ase.build.fcc110('Pt', (3, 3, 4))
-    elif facet == '100':
-        tmp_slab = ase.build.fcc100('Pt', (3, 3, 4))
-elif crystal_structure == 'bcc':
-    if facet == '111':
-        tmp_slab = ase.build.bcc111('Fe', (3, 3, 4), a=3.0)
-    elif facet == '110':
-        tmp_slab = ase.build.bcc110('Fe', (3, 3, 4), a=3.0)
-    elif facet == '100':
-        tmp_slab = ase.build.bcc100('Fe', (3, 3, 4), a=3.0)
-assert tmp_slab is not None, 'unrecognized crystal structure/facet combo'
-sites = list(tmp_slab.info['adsorbate_info']['sites'].keys())
+# Some Cr2O3 sites
+sites_dict = {
+    'Cr2O3_z': [
+        (0.0, 0.0),
+        (2.5018702100000003, 1.4444554392210054),
+        (9.067513484506406e-16, 2.8889108784420108),
+        (0.7547939021521936, 4.19625226621278),
+        (0.7547939021521931, 1.5815694906712414)
+    ],
+    'Fe2O3_z': [
+        (0, 0),
+        (0.777535734, 1.3467314),
+        (1.55507147, 0.0),
+        (-0.777535734, 1.59307962),
+        (0.388767867, 0.6733657),
+        (1.166303602, 0.6733657),
+        (-0.388767867, 0.79653981)
+    ]
+}
+sites = [i for i in range(len(sites_dict[slabname]))]
 
 
 species_dictionary = rmgpy.chemkin.load_species_dictionary(
@@ -90,7 +88,7 @@ translator = {  # going from adsorbate name in my workflow to the species dictio
 
 
 results_dir = f'../results'
-my_result_yaml = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}-ads.yaml')
+my_result_yaml = os.path.join(results_dir, 'thermo', slabname, f'{slabname}_{adsorbate_label}-ads.yaml')
 if not os.path.exists(os.path.dirname(my_result_yaml)):
     os.makedirs(os.path.dirname(my_result_yaml), exist_ok=True)
 
@@ -107,8 +105,8 @@ for i, site in enumerate(sites):
     rot_energies = 1e5 + np.zeros(3)  # for 0, 90, 180 degree rotations
     for j in range(3):
         # load the system from the trajectory file
-        system_traj_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}',
-                                        f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{float(j * 90.0):.1f}.traj')
+        system_traj_file = os.path.join(results_dir, 'system', f'{slabname}_{adsorbate_label}',
+                                        f'{slabname}_{adsorbate_label}_{site}_rot{float(j * 90.0):.1f}.traj')
         if not os.path.exists(system_traj_file):
             logging.warning(f'System trajectory file {system_traj_file} does not exist. Skipping site {site}.')
             continue
@@ -116,21 +114,25 @@ for i, site in enumerate(sites):
         system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
         system = system_trajectory[-1]
         if not util.atoms_converged(system, fmax=fmax):
-            logging.warning(f'System {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
+            logging.warning(f'System {slabname}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
             continue
 
         # reject systems where the relaxation took too many steps. This is a sign of restructuring
         if len(system_trajectory) > 100:
-            logging.warning(f'System {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} took too many steps: {len(system_trajectory)}')
+            logging.warning(f'System {slabname}_{adsorbate_label}_{site}_rot{j * 90.0} took too many steps: {len(system_trajectory)}')
             continue
 
         # reject systems where the adsorbate is below the surface
-        metal_atoms = [atom for atom in system if atom.symbol == metal]
+        slab_traj_file = os.path.join(results_dir, 'slab', f'{slabname}_slab.traj')
+        slab_traj = ase.io.trajectory.Trajectory(slab_traj_file)
+        slab = slab_traj[-1]
+
+        metal_atoms = [atom for atom in system[:len(slab)] if atom.symbol not in ['C', 'H', 'O', 'N']]
         highest_metal_z = np.max([atom.position[2] for atom in metal_atoms])  # highest z-coordinate of metal atoms
-        adsorbate_atoms = [atom for atom in system if atom.symbol != metal]
-        adsorbate_z = np.min([atom.position[2] for atom in adsorbate_atoms])  # lowest z-coordinate of adsorbate atoms
+        # adsorbate_atoms = [atom for atom in system if atom.symbol != metal]
+        adsorbate_z = np.min([atom.position[2] for atom in system[len(slab):]])  # lowest z-coordinate of adsorbate atoms
         if adsorbate_z < highest_metal_z:
-            logging.warning(f'Adsorbate {adsorbate_label} is below the surface for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+            logging.warning(f'Adsorbate {adsorbate_label} is below the surface for {slabname}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
             continue
 
         # reject systems where the adsorbate is too far away from the surface
@@ -140,28 +142,25 @@ for i, site in enumerate(sites):
             THRESHOLD = 5.0
 
         if adsorbate_z - highest_metal_z > THRESHOLD:
-            logging.warning(f'Adsorbate {adsorbate_label} is too far away from the surface for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+            logging.warning(f'Adsorbate {adsorbate_label} is too far away from the surface for {slabname}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
             continue
 
         # reject vdW species that are too close to the surface
         if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
             if adsorbate_z - highest_metal_z < 2.0:
-                logging.warning(f'Adsorbate {adsorbate_label} is too close to the surface for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+                logging.warning(f'Adsorbate {adsorbate_label} is too close to the surface for {slabname}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
                 continue
 
         # Reject systems where the adsorbate has fallen apart
-        slab_traj_file = os.path.join(results_dir, 'slab', f'{metal}_{crystal_structure}{facet}_slab.traj')
-        slab_trajectory = ase.io.trajectory.Trajectory(slab_traj_file)
-        slab = slab_trajectory[-1]
         if not util.adsorbate_intact(system, slab, adsorbate_label):
-            logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+            logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {slabname}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
             continue
 
         system_energy = system.calc.results['energy']  # in eV
 
         # include the system ZPE
-        system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 
-                                            f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90.0:.1f}_vib.yaml')
+        system_vib_yaml_file = os.path.join(results_dir, 'system', f'{slabname}_{adsorbate_label}',
+                                            f'{slabname}_{adsorbate_label}_{site}_rot{j * 90.0:.1f}_vib.yaml')
         with open(system_vib_yaml_file, 'r') as f:
             system_vib_data = yaml.load(f, Loader=yaml.FullLoader)  # Load the YAML file
 
@@ -175,15 +174,15 @@ for i, site in enumerate(sites):
 
 # Print the minimum energy site
 min_energy_site = sites[np.argmin(site_energies)]
-print(f'Minimum energy site for {adsorbate_label} on {metal} {crystal_structure}{facet}: {min_energy_site} {np.min(site_energies)} (includes ZPE)')
+print(f'Minimum energy site for {adsorbate_label} on {slabname}: {min_energy_site} {np.min(site_energies)} (includes ZPE)')
 
 rotation = site_rotations[np.argmin(site_energies)] * 90.0
 print(f'adsorbate was rotated by {rotation} degrees')
 
 
 # reload the system with the minimum energy site
-system_traj_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}',
-                                f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{min_energy_site}_rot{rotation}.traj')
+system_traj_file = os.path.join(results_dir, 'system', f'{slabname}_{adsorbate_label}',
+                                f'{slabname}_{adsorbate_label}_{min_energy_site}_rot{rotation}.traj')
 system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
 system = system_trajectory[-1]
 site = min_energy_site  # update the site to the minimum energy site
@@ -191,8 +190,8 @@ system_energy = system.calc.results['energy']  # in eV
 
 
 # Save a picture of the relaxed system
-side_pic = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', 'images', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_side.png')
-top_pic = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', 'images', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_top.png')
+side_pic = os.path.join(results_dir, 'thermo', slabname, 'images', f'{slabname}_{adsorbate_label}_{site}_rot{rotation}_side.png')
+top_pic = os.path.join(results_dir, 'thermo', slabname, 'images', f'{slabname}_{adsorbate_label}_{site}_rot{rotation}_top.png')
 if not os.path.exists(os.path.dirname(side_pic)):
     os.makedirs(os.path.dirname(side_pic), exist_ok=True)
 
@@ -201,18 +200,18 @@ if str(matplotlib.__version__) != '3.9.4':
     ase.io.write(top_pic, system, rotation='0x,0y,0z')
 else:
     existing_side_pic = os.path.join(
-        results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_side.png'
+        results_dir, 'system', f'{slabname}_{adsorbate_label}', f'{slabname}_{adsorbate_label}_{site}_rot{rotation}_side.png'
     )
     existing_top_pic = os.path.join(
-        results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_top.png'
+        results_dir, 'system', f'{slabname}_{adsorbate_label}', f'{slabname}_{adsorbate_label}_{site}_rot{rotation}_top.png'
     )
     shutil.copyfile(existing_side_pic, side_pic)
     shutil.copyfile(existing_top_pic, top_pic)
 
 
 # include the system ZPE
-system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 
-                                    f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_vib.yaml')
+system_vib_yaml_file = os.path.join(results_dir, 'system', f'{slabname}_{adsorbate_label}',
+                                    f'{slabname}_{adsorbate_label}_{site}_rot{rotation}_vib.yaml')
 with open(system_vib_yaml_file, 'r') as f:
     system_vib_data = yaml.load(f, Loader=yaml.FullLoader)
 system_zpe = system_vib_data['zpe']  # in eV
@@ -220,11 +219,11 @@ total_system_energy = system_energy + system_zpe  # in eV
 
 
 # get the slab energy
-slab_traj_file = os.path.join(results_dir, 'slab', f'{metal}_{crystal_structure}{facet}_slab.traj')
+slab_traj_file = os.path.join(results_dir, 'slab', f'{slabname}_slab.traj')
 slab_trajectory = ase.io.trajectory.Trajectory(slab_traj_file)
 slab = slab_trajectory[-1]
 slab_energy = slab.calc.results['energy']  # in eV
-print(f'Slab energy for {metal} {crystal_structure}{facet}: {slab_energy:.4f} eV')
+print(f'Slab energy for {slabname}: {slab_energy:.4f} eV')
 # # Gather the gas energy
 gas = ase.build.molecule(adsorbate_label)
 
@@ -240,7 +239,7 @@ with open(system_vib_yaml_file, 'r') as f:
 
 # get magnitude to avoid imaginary components
 frequencies = np.abs(vib_data['frequencies'])
-print(f'Vibrational frequencies for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}: {frequencies} (cm^-1)')
+print(f'Vibrational frequencies for {slabname}_{adsorbate_label}_{site}: {frequencies} (cm^-1)')
 
 # build the composition dictionary
 composition = {'H': 0, 'C': 0, 'O': 0, 'N': 0}
@@ -305,8 +304,8 @@ print()
 
 # Final heat of formation of system at 0K
 heat_of_formation_0K_kJ_mol = Hf_gas_kJ_mol + (total_system_energy - slab_energy) * eV_to_kJ
-print(f'Final heat of formation of {adsorbate_label} on {metal} {crystal_structure}{facet} ({site}) at 0K [5]: {heat_of_formation_0K_kJ_mol / eV_to_kJ:.4f} eV')
-print(f'Final heat of formation of {adsorbate_label} on {metal} {crystal_structure}{facet} ({site}) at 0K [5]: {heat_of_formation_0K_kJ_mol:.4f} kJ/mol')
+print(f'Final heat of formation of {adsorbate_label} on {slabname} ({site}) at 0K [5]: {heat_of_formation_0K_kJ_mol / eV_to_kJ:.4f} eV')
+print(f'Final heat of formation of {adsorbate_label} on {slabname} ({site}) at 0K [5]: {heat_of_formation_0K_kJ_mol:.4f} kJ/mol')
 print()
 
 print(*frequencies, sep=", ")
@@ -349,7 +348,7 @@ print(thermo_data)
 #     f.write(f'frequencies = {frequencies_str}\n')
 
 # also save as yaml file
-my_result_yaml = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}-ads.yaml')
+my_result_yaml = os.path.join(results_dir, 'thermo', slabname, f'{slabname}_{adsorbate_label}-ads.yaml')
 results_dict = {
     'name': f'{adsorbate_label}_ads',
     'DFT_binding_energy': [0, 'eV'],
