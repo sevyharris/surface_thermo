@@ -1,4 +1,4 @@
-# script to relax a Cr2O3 slab using the z direction as the surface normal
+# script to relax a Fe2O3 slab using the z direction as the surface normal
 
 import os
 import sys
@@ -23,16 +23,16 @@ local_cache = os.environ['FAIRCHEM_LOCAL_CACHE']
 sys.path.append(os.environ['SURFACE_THERMO_DIR'])
 import util
 
-slab_name = 'Cr2O3_z'
+slab_name = 'Fe2O3_z'
 plotting = True
 results_dir = '../results'  # Directory to save results
 # set up logging
 logging.basicConfig(level=logging.INFO)
 
-# Start by reading in .cif file for Cr2O3
-cif_file = 'Cr2O3.cif'
-slab = ase.io.cif.read_cif('Cr2O3.cif')
-logging.info(f"Loaded Cr2O3 from CIF file: {cif_file}")
+# Start by reading in .cif file for Fe2O3
+cif_file = 'Fe2O3.cif'
+slab = ase.io.cif.read_cif('Fe2O3.cif')
+logging.info(f"Loaded Fe2O3 from CIF file: {cif_file}")
 
 
 # assign the layers in the slab, this is only approximate for custom structures
@@ -80,7 +80,7 @@ original = copy.deepcopy(slab)
 fmax = 0.05
 max_steps = 10000
 
-trajectory_file = os.path.join(results_dir, 'slab', f'Cr2O3_z_slab.traj')
+trajectory_file = os.path.join(results_dir, 'slab', f'Fe2O3_z_slab.traj')
 opt_complete = False
 if not os.path.exists(os.path.dirname(trajectory_file)):
     os.makedirs(os.path.dirname(trajectory_file))
@@ -92,10 +92,10 @@ if os.path.exists(trajectory_file):
     # only run the optimization if the slab is not already relaxed
 
     if util.atoms_converged(slab, fmax=fmax):
-        logging.info(f"Slab for Cr2O3 z facet is already relaxed with forces below {fmax} eV/Å")
+        logging.info(f"Slab for Fe2O3 z facet is already relaxed with forces below {fmax} eV/Å")
         opt_complete = True
 else:
-    logging.info(f"Creating new slab for Cr2O3 z facet")
+    logging.info(f"Creating new slab for Fe2O3 z facet")
 
 # If the slab is not relaxed, run the optimization
 if not opt_complete:

@@ -20,7 +20,8 @@ import fairchem.core.common.relaxation.ase_utils
 
 import matplotlib.pyplot as plt
 
-sys.path.append('/home/moon/surface/surface_thermo')
+local_cache = os.environ['FAIRCHEM_LOCAL_CACHE']
+sys.path.append(os.environ['SURFACE_THERMO_DIR'])
 import util
 
 
@@ -28,7 +29,6 @@ import util
 
 
 # Some Cr2O3 sites
-
 sites_dict = {
     'Cr2O3_z': [
         (0.0, 0.0),
@@ -36,6 +36,15 @@ sites_dict = {
         (9.067513484506406e-16, 2.8889108784420108),
         (0.7547939021521936, 4.19625226621278),
         (0.7547939021521931, 1.5815694906712414)
+    ],
+    'Fe2O3_z': [
+        (0, 0),
+        (0.777535734, 1.3467314),
+        (1.55507147, 0.0),
+        (-0.777535734, 1.59307962),
+        (0.388767867, 0.6733657),
+        (1.166303602, 0.6733657),
+        (-0.388767867, 0.79653981)
     ]
 }
 
@@ -56,6 +65,11 @@ rotate = float(args.rotate)
 results_dir = '../results'  # Directory to save results
 # set up logging
 logging.basicConfig(level=logging.INFO)
+
+# skip monatomic rotations:
+if len(adsorbate_label) == 1 and rotate != 0:
+    print('Skipping redundant monatomic rotations')
+    exit(0)
 
 
 # Start by loading the slab from the trajectory file if it exists
@@ -86,7 +100,8 @@ opt_complete = False  # Flag to check if the optimization is complete
 checkpoint_path = fairchem.core.models.model_registry.model_name_to_local_file(
     'GemNet-OC-S2EFS-nsn-OC20+OC22',
     # 'EquiformerV2-31M-S2EF-OC20-All+MD',
-    local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
+    # local_cache='/home/moon/surface/tmp/fairchem_checkpoints/'
+    local_cache=local_cache
 )
 calc = fairchem.core.common.relaxation.ase_utils.OCPCalculator(
     checkpoint_path=checkpoint_path,
@@ -140,10 +155,9 @@ else:
     system.set_tags(tags)
     system.info['top layer atom index'] = system[sorted_order[0]]
 
-
     # calculate N energies and set at the lowest energy height
     logging.info(f"Finding optimal height for {adsorbate_label} on {slab_name} at {site}")
-    heights = np.linspace(0.5, 3.0, 7)
+    heights = np.linspace(0.1, 3.0, 11)
     height_energies = np.zeros(len(heights))
     test_system = copy.deepcopy(slab)
     for i, height in enumerate(heights):
@@ -154,8 +168,6 @@ else:
         test_system = test_system[:len(slab)]
     best_height = heights[np.argmin(height_energies)]
     logging.info(f"Best height for {adsorbate_label} on {slab_name} at {site} is {best_height:.2f} Å")
-
-
 
     ase.build.add_adsorbate(system, adsorbate, best_height, position=sites_dict[slab_name][site])
 
@@ -168,9 +180,8 @@ adsorbate_indices = [i for i in np.arange(len(slab), len(slab) + len(adsorbate))
 logfile = os.path.join(results_dir, 'system', f'{slab_name}_{adsorbate_label}', f'ase_{slab_name}_{adsorbate_label}_{site}_rot{rotate}.log')
 # Initialize fairchem ocp calculator
 
-system.calc = calc   
+system.calc = calc
 if not opt_complete:
-     
 
     logging.info(f'Running optimization for {slab_name}_{adsorbate_label}_{site}')
     opt = ase.optimize.BFGS(system, logfile=logfile, trajectory=system_trajectory_file, append_trajectory=True)
