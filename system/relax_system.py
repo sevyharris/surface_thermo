@@ -139,10 +139,9 @@ else:
             logging.info(f"Rotating adsorbate {adsorbate_label} by {rotate} degrees")
             adsorbate.rotate(rotate, v='x', center='COM')
 
-
     # calculate N energies and set at the lowest energy height
     logging.info(f"Finding optimal height for {adsorbate_label} on {metal} {crystal_structure} {facet} at {site}")
-    heights = np.linspace(0.5, 3.0, 7)
+    heights = np.linspace(0.1, 3.0, 11)
     height_energies = np.zeros(len(heights))
     test_system = copy.deepcopy(slab)
     for i, height in enumerate(heights):

@@ -1,17 +1,19 @@
 import numpy as np
 import scipy.cluster.vq
+import ase.build
 import ase.io.trajectory
 import ase.geometry.analysis
+
 
 # check converged
 def atoms_converged(atoms, fmax=0.01):
     """
     Check if the atoms are converged based on the maximum force. Only considers the force on uncontrained atoms.
-    
+
     Parameters:
     atoms (ase.Atoms): The atoms object to check.
     fmax (float): The maximum force threshold for convergence.
-    
+
     Returns:
     bool: True if converged, False otherwise.
     """
@@ -23,33 +25,34 @@ def atoms_converged(atoms, fmax=0.01):
     max_force = np.max(np.linalg.norm(final_force, axis=1))
     return max_force < fmax
 
+
 def get_final_energy(trajectory_file):
     """
     Get the final energy from the trajectory file.
-    
+
     Parameters:
     trajectory_file (str): The path to the trajectory file.
-    
+
     Returns:
     float: The final energy in eV.
     """
-    if type(trajectory_file) == str:
+    if isinstance(trajectory_file, str):
         traj = ase.io.trajectory.Trajectory(trajectory_file, mode='r')
-    elif type(trajectory_file) == ase.io.trajectory.Trajectory:
+    elif isinstance(trajectory_file, ase.io.trajectory.Trajectory):
         # If it's already a Trajectory object, use it directly
         traj = trajectory_file
-    
+
     return traj[-1].calc.results['energy'] if traj else None
 
 
-def adsorbate_intact(system, adsorbate_label):
+def adsorbate_intact(system, slab, adsorbate_label):
     """
     Check if the adsorbate is intact in the system.
-    
+
     Parameters:
     system (ase.Atoms): The system containing the adsorbate.
     adsorbate_label (str): The label of the adsorbate to check.
-    
+
     Returns:
     bool: True if the adsorbate is intact, False otherwise.
     """
@@ -58,15 +61,15 @@ def adsorbate_intact(system, adsorbate_label):
     original_analysis = ase.geometry.analysis.Analysis(original_adsorbate)
     original_count = np.sum([len(x) for x in original_analysis.all_bonds[0]])
 
-    # assume metal is most popular element in the system
-    metal = max(set(atom.symbol for atom in system), key=lambda x: sum(atom.symbol == x for atom in system))
-    adsorbate_indices = [i for i in range(len(system)) if system[i].symbol != metal]
+    # # assume metal is most popular element in the system
+    # metal = max(set(atom.symbol for atom in system), key=lambda x: sum(atom.symbol == x for atom in system))
+    # adsorbate_indices = [i for i in range(len(system)) if system[i].symbol != metal]
 
-    adsorbate = ase.Atoms()
-    for i in adsorbate_indices:
-        adsorbate += system[i]
-    
-    analysis = ase.geometry.analysis.Analysis(adsorbate)
+    # adsorbate = ase.Atoms()
+    # for i in adsorbate_indices:
+    #     adsorbate += system[i]
+
+    analysis = ase.geometry.analysis.Analysis(system[len(slab):])
     count = np.sum([len(x) for x in analysis.all_bonds[0]])
     return count == original_count
 
@@ -74,10 +77,10 @@ def adsorbate_intact(system, adsorbate_label):
 def is_vdW_species(species):
     """
     Check if the species is a van der Waals species.
-    
+
     Parameters:
     species (str): The species to check.
-    
+
     Returns:
     bool: True if the species is a van der Waals species, False otherwise.
     """
@@ -89,13 +92,14 @@ def is_vdW_species(species):
             bonded_to_surface = True
     return not bonded_to_surface
 
+
 def enumerate_layers(atoms):
     """
     Enumerate the layers in the slab based on the z-coordinates of the atoms.
-    
+
     Parameters:
     atoms (ase.Atoms): The slab atoms.
-    
+
     Returns:
     list: A list of layer indices.
     """
@@ -140,11 +144,9 @@ def enumerate_layers(atoms):
 
         errors[i] = compute_error(atoms, centroid, label)
 
-    
     best_nlayer = nlayers[np.argmin(errors)]
     centroid, label = scipy.cluster.vq.kmeans2(Zs, best_nlayer)
     print(centroid)
-
 
     # sort the labels by the centroid positions
     indices = np.arange(len(centroid))
@@ -157,4 +159,50 @@ def enumerate_layers(atoms):
     # print(label)
     # label = np.array([sorted_indices[i] for i in label])
     # print(label)
-    return list(np.array(new_label) + 1) # make it 1-indexed
+    return list(np.array(new_label) + 1)  # make it 1-indexed
+
+
+def get_site_names(crystal_structure=None, facet=None, slabname=None):
+    sites_dict = {
+        'Cr2O3_z': [
+            (0.0, 0.0),
+            (2.5018702100000003, 1.4444554392210054),
+            (9.067513484506406e-16, 2.8889108784420108),
+            (0.7547939021521936, 4.19625226621278),
+            (0.7547939021521931, 1.5815694906712414)
+        ],
+        'Fe2O3_z': [
+            (0, 0),
+            (0.777535734, 1.3467314),
+            (1.55507147, 0.0),
+            (-0.777535734, 1.59307962),
+            (0.388767867, 0.6733657),
+            (1.166303602, 0.6733657),
+            (-0.388767867, 0.79653981)
+        ]
+    }
+    if slabname is not None:
+        return [i for i in range(len(sites_dict[slabname]))]
+
+    assert crystal_structure is not None
+    assert facet is not None
+
+    sites = []
+    tmp_slab = None
+    if crystal_structure == 'fcc':
+        if facet == '111':
+            tmp_slab = ase.build.fcc111('Pt', (3, 3, 4))
+        elif facet == '110':
+            tmp_slab = ase.build.fcc110('Pt', (3, 3, 4))
+        elif facet == '100':
+            tmp_slab = ase.build.fcc100('Pt', (3, 3, 4))
+    elif crystal_structure == 'bcc':
+        if facet == '111':
+            tmp_slab = ase.build.bcc111('Fe', (3, 3, 4), a=3.0)
+        elif facet == '110':
+            tmp_slab = ase.build.bcc110('Fe', (3, 3, 4), a=3.0)
+        elif facet == '100':
+            tmp_slab = ase.build.bcc100('Fe', (3, 3, 4), a=3.0)
+    assert tmp_slab is not None, 'unrecognized crystal structure/facet combo'
+    sites = list(tmp_slab.info['adsorbate_info']['sites'].keys())
+    return sites
