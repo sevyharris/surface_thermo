@@ -83,7 +83,7 @@ translator = {  # going from adsorbate name in my workflow to the species dictio
     'NH2': 'H2NX',
     'NH': 'HNX',
     'N': 'NX',
-    'N2': 'N2X',
+    'N2': 'N2X2',
     'O2': 'O2X',
     'NO': 'NOX',
 }
@@ -251,10 +251,10 @@ system_energy = system.calc.results['energy']  # in eV
 existing_side_pic = system_traj_file.replace('.traj', '_side.png')
 existing_top_pic = system_traj_file.replace('.traj', '_top.png')
 side_pic = os.path.join(
-    results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 'images', os.path.basename(existing_side_pic)
+    results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', 'images', os.path.basename(existing_side_pic)
 )
 top_pic = os.path.join(
-    results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 'images', os.path.basename(existing_top_pic)
+    results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', 'images', os.path.basename(existing_top_pic)
 )
 
 if not os.path.exists(os.path.dirname(side_pic)):
@@ -403,19 +403,30 @@ print(thermo_data)
 
 # also save as yaml file
 my_result_yaml = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}-ads.yaml')
+
+n_sites = 1
+adj_list = None
+if adsorbate_label in translator:
+    sp = species_dictionary[translator[adsorbate_label]]
+    n_sites = int(np.sum([atom.is_bonded_to_surface() for atom in sp.molecule[0].atoms]))
+    adj_list = sp.molecule[0].to_adjacency_list()
+
+
 results_dict = {
     'name': f'{adsorbate_label}_ads',
     'DFT_binding_energy': [0, 'eV'],
     'heat_of_formation_0K': [heat_of_formation_0K_kJ_mol, 'kJ/mol'],
     'composition': composition,
-    'sites': 1,
+    'sites': n_sites,
     'adsorbate_mass': [float(molecular_weight), 'amu'],
     'linear_scaling_binding_atom': [-2.479, 'eV'],
     'linear_scaling_gamma(X)': [1.0],
     'linear_scaling_psi': [0, 'eV'],
     'frequencies': [float(f) for f in frequencies],  # Convert frequencies to float and append unit
-    'adjacency_list': species_dictionary[translator[adsorbate_label]].to_adjacency_list() if adsorbate_label in translator else None,
+    'adjacency_list': adj_list,
 }
+
+print(results_dict['adjacency_list'])
 with open(my_result_yaml, 'w') as f:
     yaml.dump(results_dict, f, default_flow_style=False)
 
