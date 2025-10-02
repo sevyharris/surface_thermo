@@ -195,10 +195,11 @@ if plotting:
 logging.info(f'Running vibrational analysis for {metal} {crystal_structure}{facet}_{adsorbate_label}_{site}')
 vals, counts = np.unique(system.get_atomic_numbers(), return_counts=True)
 metal_number = vals[np.argmax(counts)]
-adsorbate_indices = []
-for i, atom in enumerate(system):
-    if atom.number != metal_number:
-        adsorbate_indices.append(atom.index)
+adsorbate_indices = [i for i in range(len(system)) if i >= len(slab)]
+# adsorbate_indices = []
+# for i, atom in enumerate(system):
+#     if atom.number != metal_number:
+#         adsorbate_indices.append(atom.index)
 
 
 # vib = ase.vibrations.Vibrations(system, indices=adsorbate_indices)

@@ -35,7 +35,8 @@ sites_dict = {
         (2.5018702100000003, 1.4444554392210054),
         (9.067513484506406e-16, 2.8889108784420108),
         (0.7547939021521936, 4.19625226621278),
-        (0.7547939021521931, 1.5815694906712414)
+        (0.7547939021521931, 1.5815694906712414),
+        (1.74707631e+00, 2.75179683e+00)
     ],
     'Fe2O3_z': [
         (0, 0),
@@ -93,7 +94,8 @@ slab = load_slab_from_trajectory(slab_name, results_dir)
 
 # fmax = 0.01
 fmax = 0.05
-MAXSTEP = 1000  # Maximum number of optimization steps -- change this later to be larger
+MAXSTEP = 50  # Maximum number of optimization steps
+#MAXSTEP = 1000  # Maximum number of optimization steps -- change this later to be larger
 opt_complete = False  # Flag to check if the optimization is complete
 
 
@@ -157,7 +159,7 @@ else:
 
     # calculate N energies and set at the lowest energy height
     logging.info(f"Finding optimal height for {adsorbate_label} on {slab_name} at {site}")
-    heights = np.linspace(0.1, 3.0, 11)
+    heights = np.linspace(-0.5, 3.0, 11)
     height_energies = np.zeros(len(heights))
     test_system = copy.deepcopy(slab)
     for i, height in enumerate(heights):

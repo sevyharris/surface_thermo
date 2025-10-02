@@ -169,7 +169,8 @@ def get_site_names(crystal_structure=None, facet=None, slabname=None):
             (2.5018702100000003, 1.4444554392210054),
             (9.067513484506406e-16, 2.8889108784420108),
             (0.7547939021521936, 4.19625226621278),
-            (0.7547939021521931, 1.5815694906712414)
+            (0.7547939021521931, 1.5815694906712414),
+            (1.74707631e+00, 2.75179683e+00)
         ],
         'Fe2O3_z': [
             (0, 0),
@@ -206,3 +207,9 @@ def get_site_names(crystal_structure=None, facet=None, slabname=None):
     assert tmp_slab is not None, 'unrecognized crystal structure/facet combo'
     sites = list(tmp_slab.info['adsorbate_info']['sites'].keys())
     return sites
+
+
+def get_max_surface_displacement(slab_init, system_end):
+    # check whether the surface has rearranged itself after optimizing the system
+    N_atoms = len(slab_init)
+    return np.max(np.linalg.norm(system_end[:N_atoms].positions - slab_init.positions, axis=1))

@@ -45,7 +45,8 @@ sites_dict = {
         (2.5018702100000003, 1.4444554392210054),
         (9.067513484506406e-16, 2.8889108784420108),
         (0.7547939021521936, 4.19625226621278),
-        (0.7547939021521931, 1.5815694906712414)
+        (0.7547939021521931, 1.5815694906712414),
+        (1.74707631e+00, 2.75179683e+00)
     ],
     'Fe2O3_z': [
         (0, 0),
@@ -117,16 +118,21 @@ for i, site in enumerate(sites):
             logging.warning(f'System {slabname}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
             continue
 
-        # reject systems where the relaxation took too many steps. This is a sign of restructuring
-        if len(system_trajectory) > 100:
-            logging.warning(f'System {slabname}_{adsorbate_label}_{site}_rot{j * 90.0} took too many steps: {len(system_trajectory)}')
-            continue
+        logging.warning(f'\tEnergy={system.calc.results["energy"]}eV for {site} {j * 90.0}')
 
         # reject systems where the adsorbate is below the surface
         slab_traj_file = os.path.join(results_dir, 'slab', f'{slabname}_slab.traj')
         slab_traj = ase.io.trajectory.Trajectory(slab_traj_file)
         slab = slab_traj[-1]
 
+        dmax = util.get_max_surface_displacement(slab, system)
+        logging.warning(f'{site} {j * 90.0} dmax is {dmax} with {len(system_trajectory)} steps')
+
+        # Reject systems where surface restructuring took place: too many steps in relaxation and too large a max displacement of the slab
+        if len(system_trajectory) > 20 and dmax > 0.25:
+            logging.warning(f'System {slabname}_{adsorbate_label}_{site}_rot{j * 90.0} took too many steps: {len(system_trajectory)}')
+            continue
+        
         metal_atoms = [atom for atom in system[:len(slab)] if atom.symbol not in ['C', 'H', 'O', 'N']]
         highest_metal_z = np.max([atom.position[2] for atom in metal_atoms])  # highest z-coordinate of metal atoms
         # adsorbate_atoms = [atom for atom in system if atom.symbol != metal]

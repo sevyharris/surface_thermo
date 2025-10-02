@@ -147,6 +147,8 @@ def valid_traj(system_trajectory, slab, adsorbate_label, system_name='XXX'):
         logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {system_name}. Skipping.')
         return False
 
+    return True
+
 # -------------- Gather the binding energies ----------------
 possible_rotations = ['0.0', '90.0', '180.0']  # in degrees
 
@@ -172,6 +174,7 @@ for i, site in enumerate(sites):
         slab = slab_trajectory[-1]
         
         if not valid_traj(system_trajectory, slab, adsorbate_label, system_name=system_name):
+            print(system_name, 'was invalid')
             continue
 
         system_energy = system.calc.results['energy']  # in eV
@@ -196,7 +199,11 @@ custom_traj_files = glob.glob(
         f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_custom*.traj'
     )
 )
-custom_energies = np.zeros(len(custom_traj_files)) + 1e5
+
+if custom_traj_files:
+    custom_energies = np.zeros(len(custom_traj_files)) + 1e5
+else:
+    custom_energies = None
 for i, system_traj_file in enumerate(custom_traj_files):
     system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
     system = system_trajectory[-1]
@@ -223,7 +230,7 @@ for i, system_traj_file in enumerate(custom_traj_files):
     custom_energies[i] = total_system_energy
 
 
-if np.min(site_energies) < np.min(custom_energies):
+if not custom_traj_files or np.min(site_energies) < np.min(custom_energies):
     # Print the minimum energy site
     min_energy_site = sites[np.argmin(site_energies)]
     print(f'Minimum energy site for {adsorbate_label} on {metal} {crystal_structure}{facet}: {min_energy_site} {np.min(site_energies)} (includes ZPE)')

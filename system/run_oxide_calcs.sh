@@ -6,7 +6,8 @@
 #SBATCH --export=ALL
 
 # define adsorbates
-adsorbates=("O" "H" "N" "C" "H2" "N2" "H2O" "O2" "NH3" "NH" "OH" "NO" "NH2" "CH3" "CH2" "CH" "CO" "CO2")
+#adsorbates=("O" "H" "N" "C" "H2" "N2" "H2O" "O2" "NH3" "NH" "OH" "NO" "NH2" "CH3" "CH2" "CH" "CO" "CO2")
+adsorbates=("H2" "N2" "H2O" "O2" "NH3" "NH" "OH" "NO" "NH2" "CH3" "CH2" "CH" "CO" "CO2")
 
 for slabname in 'Cr2O3_z'; do
     for adsorbate in "${adsorbates[@]}"; do

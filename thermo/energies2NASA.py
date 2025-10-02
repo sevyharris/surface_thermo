@@ -12,6 +12,17 @@ import matplotlib.gridspec as gridspec
 from matplotlib.ticker import NullFormatter, MaxNLocator, LogLocator
 import rmgpy.data.thermo
 import rmgpy.species
+import argparse
+
+
+# get adsorbate label from input
+parser = argparse.ArgumentParser(description='Run thermo calculation for all adsorbates on a slab')
+parser.add_argument('--system_name', type=str, required=True, help='System name, like Pt_fcc111')
+
+args = parser.parse_args()
+system_name = args.system_name
+
+
 
 # define constants
 R = 8.3144621E-3  # ideal Gas constant in kJ/mol-K
@@ -87,7 +98,10 @@ def get_translation_thermo(molecule, temperature):
                     dH_trans[i] = R * 1.66667 * T            
         
                 else: #area is not a function of temperature
-                    Q_trans[i] = (2*np.pi*m*amu*kB*T/h**2) * area * sites
+                    if sites > 0:
+                        Q_trans[i] = (2*np.pi*m*amu*kB*T/h**2) * area * sites
+                    else:
+                        Q_trans[i] = (2*np.pi*m*amu*kB*T/h**2) * area
                     S_trans[i] = R * (2.0 + np.log( Q_trans[i] ))
                     Cp_trans[i] = R * 1.0 #NOTE: Cp = Cv 
                     dH_trans[i] = R * 1.0 * T            
@@ -524,10 +538,23 @@ def parse_input_file(input_file, molecule):
 # -------------------------------------------------------------------------
 # Main script to read species list and compute thermodynamic properties
 
-metal = 'Pt'
-crystal_structure = 'fcc'
-facet = '111'
-filenames = glob.glob(os.path.join(os.environ['SURFACE_THERMO_DIR'], f'results/thermo/{metal}_{crystal_structure}{facet}/{metal}_{crystal_structure}{facet}_*-ads.yaml'))
+# metal = 'Pt'
+# crystal_structure = 'fcc'
+# facet = '111'
+
+# system_name = 'Pt_fcc111'
+# system_name = 'Pt_fcc100'
+# system_name = 'Fe_fcc111'
+# system_name = 'Fe_bcc100'
+# system_name = 'Cr_bcc100'
+# system_name = 'Cr_bcc110'
+# system_name = 'Cr2O3_z'
+# system_name = 'Fe2O3_z'
+
+metal = system_name.split('_')[0]
+facet = system_name.split('_')[-1]
+
+filenames = glob.glob(os.path.join(os.environ['SURFACE_THERMO_DIR'], f'results/thermo/{system_name}/{system_name}_*-ads.yaml'))
 new_output = open('my_new_cti.txt', 'w')
 
 
@@ -537,7 +564,8 @@ counter = -1
 
 # compile it all into a single database and a single library which I'll call harris_butane
 # my_library_name = 'Pt_thermodata_adsorbates'
-my_library_name = f'{metal}_{crystal_structure}{facet}_gemnet'
+#my_library_name = f'{metal}_{crystal_structure}{facet}_gemnet'
+my_library_name = f'{system_name}_gemnet'
 
 output_file = f'{my_library_name}.py'
 thermo_database = rmgpy.data.thermo.ThermoDatabase()
@@ -593,7 +621,7 @@ for index, filename in enumerate(filenames):
     species_line += test.species_lines
 
     get_thermo_from_NASA(temperature, test)
-    compare_NASA_to_thermo(temperature, test)
+    # compare_NASA_to_thermo(temperature, test)
 
     # sp = rmgpy.species.Species().from_adjacency_list(test.adjacency_list)
     sp = rmgpy.molecule.Molecule().from_adjacency_list(test.adjacency_list)
@@ -613,6 +641,8 @@ for index, filename in enumerate(filenames):
         label=test.name,
         item=sp,
         data=thermo_data,
+        metal=metal,
+        facet=facet,
     )
 
     thermo_database.libraries[my_library_name].entries[entry.label] = entry
