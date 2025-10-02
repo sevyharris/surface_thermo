@@ -1,6 +1,6 @@
 # script to compile important information from adsorbate quantum chemistry calculation
-
 import os
+import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import rmgpy.constants
@@ -97,6 +97,56 @@ if not os.path.exists(os.path.dirname(my_result_yaml)):
 
 eV_to_kJ = 96.485332
 
+
+def valid_traj(system_trajectory, slab, adsorbate_label, system_name='XXX'):
+    # return True if it passes all checks
+    system = system_trajectory[-1]
+
+    # print the maximum displacement
+    dmax = util.get_max_surface_displacement(slab, system)
+    logging.warning(f'{system_name} dmax is {dmax}')
+
+    # Make sure it's converged to fmax
+    if not util.atoms_converged(system, fmax=fmax):
+        logging.warning(f'System {system_name} is not converged')
+        return False
+
+    # reject systems where the relaxation took too many steps. This is a sign of restructuring
+    if len(system_trajectory) > 100:
+        logging.warning(f'System {system_name} took too many steps: {len(system_trajectory)}')
+        return False
+
+
+    # reject systems where the adsorbate is below the surface
+    metal_atoms = [atom for atom in system if atom.symbol not in ['H', 'C', 'O', 'N', 'S']]
+    highest_metal_z = np.max([atom.position[2] for atom in metal_atoms])  # highest z-coordinate of metal atoms
+    adsorbate_atoms = system[len(slab):]
+    adsorbate_z = np.min([atom.position[2] for atom in adsorbate_atoms])  # lowest z-coordinate of adsorbate atoms
+    if adsorbate_z < highest_metal_z:
+        logging.warning(f'Adsorbate is below the surface for {system_name}. Skipping.')
+        return False
+    
+    # reject systems where the adsorbate is too far away from the surface
+    THRESHOLD = 3.0  # in Angstroms
+    # if vdW, use a larger threshold
+    if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
+        THRESHOLD = 5.0
+
+    if adsorbate_z - highest_metal_z > THRESHOLD:
+        logging.warning(f'Adsorbate {adsorbate_label} is too far away from the surface for {system_name}. Skipping.')
+        return False
+
+    # reject vdW species that are too close to the surface
+    if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
+        if adsorbate_z - highest_metal_z < 2.0:
+            logging.warning(f'Adsorbate {adsorbate_label} is too close to the surface for {system_name}. Skipping.')
+            return False
+
+    # Reject systems where the adsorbate has fallen apart
+    if not util.adsorbate_intact(system, slab, adsorbate_label):
+        logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {system_name}. Skipping.')
+        return False
+
 # -------------- Gather the binding energies ----------------
 possible_rotations = ['0.0', '90.0', '180.0']  # in degrees
 
@@ -115,46 +165,13 @@ for i, site in enumerate(sites):
 
         system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
         system = system_trajectory[-1]
-        if not util.atoms_converged(system, fmax=fmax):
-            logging.warning(f'System {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} is not converged')
-            continue
+        system_name = f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90.0}'
 
-        # reject systems where the relaxation took too many steps. This is a sign of restructuring
-        if len(system_trajectory) > 100:
-            logging.warning(f'System {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90.0} took too many steps: {len(system_trajectory)}')
-            continue
-
-        # reject systems where the adsorbate is below the surface
-        metal_atoms = [atom for atom in system if atom.symbol == metal]
-        highest_metal_z = np.max([atom.position[2] for atom in metal_atoms])  # highest z-coordinate of metal atoms
-        adsorbate_atoms = [atom for atom in system if atom.symbol != metal]
-        adsorbate_z = np.min([atom.position[2] for atom in adsorbate_atoms])  # lowest z-coordinate of adsorbate atoms
-        if adsorbate_z < highest_metal_z:
-            logging.warning(f'Adsorbate {adsorbate_label} is below the surface for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
-            continue
-
-        # reject systems where the adsorbate is too far away from the surface
-        THRESHOLD = 3.0  # in Angstroms
-        # if vdW, use a larger threshold
-        if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
-            THRESHOLD = 5.0
-
-        if adsorbate_z - highest_metal_z > THRESHOLD:
-            logging.warning(f'Adsorbate {adsorbate_label} is too far away from the surface for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
-            continue
-
-        # reject vdW species that are too close to the surface
-        if util.is_vdW_species(species_dictionary[translator[adsorbate_label]]):
-            if adsorbate_z - highest_metal_z < 2.0:
-                logging.warning(f'Adsorbate {adsorbate_label} is too close to the surface for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
-                continue
-
-        # Reject systems where the adsorbate has fallen apart
         slab_traj_file = os.path.join(results_dir, 'slab', f'{metal}_{crystal_structure}{facet}_slab.traj')
         slab_trajectory = ase.io.trajectory.Trajectory(slab_traj_file)
         slab = slab_trajectory[-1]
-        if not util.adsorbate_intact(system, slab, adsorbate_label):
-            logging.warning(f'Adsorbate {adsorbate_label} has fallen apart for {metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{j * 90}. Skipping.')
+        
+        if not valid_traj(system_trajectory, slab, adsorbate_label, system_name=system_name):
             continue
 
         system_energy = system.calc.results['energy']  # in eV
@@ -172,47 +189,83 @@ for i, site in enumerate(sites):
     site_energies[i] = np.min(rot_energies)
     site_rotations[i] = np.argmin(rot_energies)  # store the rotation with the minimum energy
 
+# also incorporate custom trajectories
+custom_traj_files = glob.glob(
+    os.path.join(
+        results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}',
+        f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_custom*.traj'
+    )
+)
+custom_energies = np.zeros(len(custom_traj_files)) + 1e5
+for i, system_traj_file in enumerate(custom_traj_files):
+    system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
+    system = system_trajectory[-1]
 
-# Print the minimum energy site
-min_energy_site = sites[np.argmin(site_energies)]
-print(f'Minimum energy site for {adsorbate_label} on {metal} {crystal_structure}{facet}: {min_energy_site} {np.min(site_energies)} (includes ZPE)')
+    slab_traj_file = os.path.join(results_dir, 'slab', f'{metal}_{crystal_structure}{facet}_slab.traj')
+    slab_trajectory = ase.io.trajectory.Trajectory(slab_traj_file)
+    slab = slab_trajectory[-1]
 
-rotation = site_rotations[np.argmin(site_energies)] * 90.0
-print(f'adsorbate was rotated by {rotation} degrees')
+    if not valid_traj(system_trajectory, slab, adsorbate_label, system_name=system_traj_file):
+        continue
+
+    system_energy = system.calc.results['energy']  # in eV
+
+    # include the system ZPE
+    system_vib_yaml_file = system_traj_file.replace('.traj', '_vib.yaml')
+    if not os.path.exists(system_vib_yaml_file):
+        logging.warning(f'no vib yaml {system_vib_yaml_file}')
+        continue
+    with open(system_vib_yaml_file, 'r') as f:
+        system_vib_data = yaml.load(f, Loader=yaml.FullLoader)  # Load the YAML file
+
+    system_zpe = system_vib_data['zpe']  # in eV
+    total_system_energy = system_energy + system_zpe  # in eV
+    custom_energies[i] = total_system_energy
 
 
-# reload the system with the minimum energy site
-system_traj_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}',
-                                f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{min_energy_site}_rot{rotation}.traj')
+if np.min(site_energies) < np.min(custom_energies):
+    # Print the minimum energy site
+    min_energy_site = sites[np.argmin(site_energies)]
+    print(f'Minimum energy site for {adsorbate_label} on {metal} {crystal_structure}{facet}: {min_energy_site} {np.min(site_energies)} (includes ZPE)')
+
+    rotation = site_rotations[np.argmin(site_energies)] * 90.0
+    print(f'adsorbate was rotated by {rotation} degrees')
+
+
+    # reload the system with the minimum energy site
+    system_traj_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}',
+                                    f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{min_energy_site}_rot{rotation}.traj')
+
+    site = min_energy_site  # update the site to the minimum energy site
+else:
+    min_custom_energy_index = np.argmin(custom_energies)
+    system_traj_file = custom_traj_files[min_custom_energy_index]
+    print(f'Minimum energy comes from custom file {system_traj_file}')
+
 system_trajectory = ase.io.trajectory.Trajectory(system_traj_file)
 system = system_trajectory[-1]
-site = min_energy_site  # update the site to the minimum energy site
 system_energy = system.calc.results['energy']  # in eV
 
 
 # Save a picture of the relaxed system
-side_pic = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', 'images', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_side.png')
-top_pic = os.path.join(results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}', 'images', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_top.png')
+existing_side_pic = system_traj_file.replace('.traj', '_side.png')
+existing_top_pic = system_traj_file.replace('.traj', '_top.png')
+side_pic = os.path.join(
+    results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 'images', os.path.basename(existing_side_pic)
+)
+top_pic = os.path.join(
+    results_dir, 'thermo', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 'images', os.path.basename(existing_top_pic)
+)
+
 if not os.path.exists(os.path.dirname(side_pic)):
     os.makedirs(os.path.dirname(side_pic), exist_ok=True)
 
-if str(matplotlib.__version__) != '3.9.4':
-    ase.io.write(side_pic, system, rotation='-90x,0y,0z')
-    ase.io.write(top_pic, system, rotation='0x,0y,0z')
-else:
-    existing_side_pic = os.path.join(
-        results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_side.png'
-    )
-    existing_top_pic = os.path.join(
-        results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_top.png'
-    )
-    shutil.copyfile(existing_side_pic, side_pic)
-    shutil.copyfile(existing_top_pic, top_pic)
+shutil.copyfile(existing_side_pic, side_pic)
+shutil.copyfile(existing_top_pic, top_pic)
 
 
 # include the system ZPE
-system_vib_yaml_file = os.path.join(results_dir, 'system', f'{metal}_{crystal_structure}{facet}_{adsorbate_label}', 
-                                    f'{metal}_{crystal_structure}{facet}_{adsorbate_label}_{site}_rot{rotation}_vib.yaml')
+system_vib_yaml_file = system_traj_file.replace('.traj', '_vib.yaml')
 with open(system_vib_yaml_file, 'r') as f:
     system_vib_data = yaml.load(f, Loader=yaml.FullLoader)
 system_zpe = system_vib_data['zpe']  # in eV
