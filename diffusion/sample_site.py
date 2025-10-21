@@ -34,7 +34,7 @@ sys.path.append(os.environ['SURFACE_THERMO_DIR'])
 # sys.path.append('/home/moon/surface/surface_thermo')
 import util
 
-working_dir = '/scratch ...'
+working_dir = '/scratch/harris.se/guassian_scratch/interstitials/Fe_fcc111_O/sobol_512'
 os.makedirs(working_dir, exist_ok=True)
 
 sobol_index = int(sys.argv[1])
@@ -68,6 +68,7 @@ np.random.seed(400)
 sobol = scipy.stats.qmc.Sobol(3)
 N = 2 ** 9
 normalized_coords = sobol.random(N)
+
 
 def normalized2xyz(x_norm, y_norm, z_norm):
     # 13 - 14.8 is layer 2
